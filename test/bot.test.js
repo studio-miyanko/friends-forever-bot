@@ -38,6 +38,18 @@ test('feeds tool results back to the model until it answers', async () => {
   assert.match(turns[1].content, /missing_tool/);
 });
 
+test('asks for an answer on the last step instead of more lookups', async () => {
+  let last;
+  const chat = async (messages, tools, key, final) => {
+    last = messages.at(-1);
+    if (final) return { content: 'Answer.' };
+    return { content: '', tool_calls: [{ id: 'a', type: 'function', function: { name: 'missing_tool', arguments: '{}' } }] };
+  };
+
+  assert.equal(await answer('Where is Thunderfury?', 'key', chat), 'Answer.');
+  assert.match(last.content, /Answer the question now/);
+});
+
 test('falls back to the second model when the first is used up', async (t) => {
   const asked = [];
   t.mock.method(globalThis, 'fetch', async (url, init) => {

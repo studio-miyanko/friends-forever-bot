@@ -8,10 +8,12 @@ export const MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
 const MAX_STEPS = 6;
 const DEADLINE_MS = 10 * 60 * 1000;
 const NO_ANSWER = "Sorry, I couldn't find an answer to that in WoW Forever.";
+const ANSWER_NOW = 'Stop looking things up. Answer the question now from what the tools returned.';
 
 const INSTRUCTIONS = `You answer World of Warcraft: Forever questions for a group of friends in a Discord server.
 
 - Look every fact up with the tools: search for names, get_page for details, get_news for news, beta builds and patch notes. Never answer from memory.
+- Answer as soon as the tools give enough, usually after 2 or 3 lookups.
 - Cover WoW Forever only. For other games or WoW versions, say that you only know WoW Forever.
 - Keep it short for Discord: at most 1200 characters, plain sentences or a short list, no tables or headings.
 - End with the Wowhead links you used, at most 3, each on its own line.
@@ -102,6 +104,9 @@ export async function answer(question, apiKey, chat = callGemini) {
   ];
   for (let step = 1; step <= MAX_STEPS; step++) {
     const final = step === MAX_STEPS || Date.now() - started > DEADLINE_MS;
+
+    // Gemini ignores tool_choice none and keeps looking things up, only a plain request makes it answer.
+    if (final) messages.push({ role: 'user', content: ANSWER_NOW });
     const reply = await chat(messages, functions, apiKey, final);
     if (!reply.tool_calls?.length || final) return reply.content?.trim() || NO_ANSWER;
     messages.push({ role: 'assistant', content: reply.content ?? '', tool_calls: reply.tool_calls });
