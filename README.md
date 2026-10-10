@@ -12,7 +12,7 @@ It runs on Cloudflare Workers' free plan and needs no server of its own.
 
 1. Discord sends each `/wowf` to the Worker, which checks Discord's signature and replies "thinking…".
 2. A Durable Object alarm takes the question, because free models can need longer than the 30 seconds a Worker may run after replying.
-3. The agent runs the wow-forever-search tools in the Worker over an in-memory MCP transport and lets `openrouter/free` pick a free model.
+3. The agent runs the wow-forever-search tools in the Worker over an in-memory MCP transport and lets `openrouter/free` pick a free model. If that model is down or rate-limited, OpenRouter falls back to other free models that can call tools, read from its live model list.
 4. The answer replaces "thinking…", with the Wowhead links it used.
 
 ## Set up
@@ -48,7 +48,7 @@ OPENROUTER_API_KEY=... npm run ask -- "Where does Thunderfury drop?"
 
 | Limit | Value |
 |---|---|
-| OpenRouter free models | 50 requests a day per account, 1,000 after a one-time purchase of 10 credits. A question takes 2 to 4 |
+| OpenRouter free models | 50 requests a day per account, 1,000 after a one-time purchase of 10 credits. A question takes 2 to 4. No fallback helps once the daily limit is used up |
 | Cloudflare Workers Free | 100,000 requests a day |
 | Question length | 300 characters |
 | Answer length | 2,000 characters, Discord's limit |

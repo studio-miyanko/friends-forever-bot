@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { answer } from '../src/agent.js';
+import { answer, pickFallbacks } from '../src/agent.js';
 import { clip, isFromDiscord } from '../src/discord.js';
 
 const hex = (bytes) => Buffer.from(bytes).toString('hex');
@@ -36,6 +36,17 @@ test('feeds tool results back to the model until it answers', async () => {
   assert.equal(await answer('Where is Thunderfury?', 'key', chat), 'Done.');
   assert.equal(turns[1].role, 'tool');
   assert.match(turns[1].content, /missing_tool/);
+});
+
+test('falls back only to free models that can call tools', () => {
+  const free = { prompt: '0', completion: '0' };
+  const models = [
+    { id: 'openrouter/free', pricing: free, supported_parameters: ['tools'] },
+    { id: 'a:free', pricing: free, supported_parameters: ['tools', 'temperature'] },
+    { id: 'b:free', pricing: free, supported_parameters: ['temperature'] },
+    { id: 'paid', pricing: { prompt: '0.000001', completion: '0.000002' }, supported_parameters: ['tools'] },
+  ];
+  assert.deepEqual(pickFallbacks(models), ['a:free']);
 });
 
 test('keeps replies within Discord’s 2000 characters', () => {

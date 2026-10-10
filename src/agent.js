@@ -2,7 +2,13 @@ import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { createServer } from 'wow-forever-search/src/server.js';
 
 const ROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const MODEL = 'openrouter/free';
+const ATTEMPTS = 3;
+
+// OpenRouter accepts at most 3 models per request: the router plus 2 fallbacks.
+const FALLBACKS_PER_TRY = 2;
+const MODELS_TTL_MS = 60 * 60 * 1000;
 const MAX_STEPS = 6;
 const DEADLINE_MS = 10 * 60 * 1000;
 const NO_ANSWER = "Sorry, I couldn't find an answer to that in WoW Forever.";
@@ -51,18 +57,42 @@ async function runTool(client, call) {
   }
 }
 
-// Each attempt can land on a different free model, so every failure is worth one more try.
+// Free models come and go, so the fallbacks are read from OpenRouter's live list instead of hard-coded.
+export function pickFallbacks(models) {
+  return models
+    .filter((model) => model.id !== MODEL && model.pricing?.prompt === '0' && model.pricing?.completion === '0')
+    .filter((model) => model.supported_parameters?.includes('tools'))
+    .slice(0, ATTEMPTS * FALLBACKS_PER_TRY)
+    .map((model) => model.id);
+}
+
+let fallbacks = { time: 0, ids: [] };
+
+async function getFallbacks() {
+  if (Date.now() - fallbacks.time < MODELS_TTL_MS) return fallbacks.ids;
+  try {
+    const response = await fetch(MODELS_URL, { signal: AbortSignal.timeout(10_000) });
+    fallbacks = { time: Date.now(), ids: pickFallbacks((await response.json()).data) };
+  } catch (err) {
+    console.log('OpenRouter model list failed', err.message);
+  }
+  return fallbacks.ids;
+}
+
+// OpenRouter tries the models in order when one is down or rate-limited, and each retry brings 2 new fallbacks.
 export async function callRouter(messages, tools, apiKey, final) {
-  const body = JSON.stringify({
-    model: MODEL,
-    messages,
-    tools,
-    tool_choice: final ? 'none' : 'auto',
-    max_tokens: 1500,
-    reasoning: { effort: 'low' },
-  });
+  const ids = await getFallbacks();
   let failure;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= ATTEMPTS; attempt++) {
+    const extra = ids.slice((attempt - 1) * FALLBACKS_PER_TRY, attempt * FALLBACKS_PER_TRY);
+    const body = JSON.stringify({
+      models: [MODEL, ...extra],
+      messages,
+      tools,
+      tool_choice: final ? 'none' : 'auto',
+      max_tokens: 1500,
+      reasoning: { effort: 'low' },
+    });
     try {
       const response = await fetch(ROUTER_URL, {
         method: 'POST',
@@ -78,6 +108,7 @@ export async function callRouter(messages, tools, apiKey, final) {
       if (response.ok) {
         const data = await response.json();
         const message = data.choices?.[0]?.message;
+        console.log('answered by', data.model);
         if (message?.content?.trim() || message?.tool_calls?.length) return message;
         failure = `OpenRouter sent an empty reply from ${data.model}`;
       } else {
