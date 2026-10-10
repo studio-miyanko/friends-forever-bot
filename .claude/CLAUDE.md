@@ -1,0 +1,21 @@
+# wowf-bot
+
+## Rules
+
+- Discord interactions over HTTP only, no gateway connection, because a Worker can't hold one open.
+- Every question runs in the `Ask` Durable Object's alarm. A Worker may only run 30 s after replying, and free models often need longer.
+- The tools come from wow-forever-search's `createServer()` over `InMemoryTransport`. Never copy its parsers here. Fix sources there and bump the dependency.
+- The model stays `openrouter/free`. The user pays for no service, so no paid models and no paid Cloudflare features.
+- Secrets: `OPENROUTER_API_KEY` is a Worker secret. The bot token is only used by `npm run register` and never stored in the Worker. Never write a key into a file.
+- Replies go out with `allowed_mentions: { parse: [] }`, so a model can never ping `@everyone`.
+- Free plan CPU: tool calls measured 1 to 36 ms on 2026-10-10 and passed, though the limit is 10 ms. If error 1102 (exceeded CPU) shows up in the logs, that limit is the cause.
+
+## Checks
+
+- `npm test` checks the signature check, the agent loop and the reply length. It needs no network.
+- `npm run ask -- "question"` asks one live question with `OPENROUTER_API_KEY` set.
+
+## Deploy
+
+1. Run `npm test`.
+2. Run `npx wrangler deploy`. Workers Builds is not connected.

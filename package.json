@@ -1,0 +1,24 @@
+{
+  "name": "wowf-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Discord bot that answers WoW Forever questions with the wow-forever-search MCP server, on Cloudflare Workers and OpenRouter's free models.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "ask": "node scripts/ask.js",
+    "register": "node scripts/register.js",
+    "test": "node --test",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/client": "^2.3.1",
+    "wow-forever-search": "github:studio-miyanko/wow-forever-search#semver:^1.1.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.149.0"
+  }
+}
