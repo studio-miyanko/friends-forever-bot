@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { answer, pickFallbacks } from '../src/agent.js';
+import { MODELS, answer, callGemini } from '../src/agent.js';
 import { clip, isFromDiscord } from '../src/discord.js';
 
 const hex = (bytes) => Buffer.from(bytes).toString('hex');
@@ -38,15 +38,21 @@ test('feeds tool results back to the model until it answers', async () => {
   assert.match(turns[1].content, /missing_tool/);
 });
 
-test('falls back only to free models that can call tools', () => {
-  const free = { prompt: '0', completion: '0' };
-  const models = [
-    { id: 'openrouter/free', pricing: free, supported_parameters: ['tools'] },
-    { id: 'a:free', pricing: free, supported_parameters: ['tools', 'temperature'] },
-    { id: 'b:free', pricing: free, supported_parameters: ['temperature'] },
-    { id: 'paid', pricing: { prompt: '0.000001', completion: '0.000002' }, supported_parameters: ['tools'] },
-  ];
-  assert.deepEqual(pickFallbacks(models), ['a:free']);
+test('falls back to the second model when the first is used up', async (t) => {
+  const asked = [];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    asked.push(JSON.parse(init.body).model);
+    if (asked.length === 1) return new Response('{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}', { status: 429 });
+    return Response.json({ choices: [{ message: { content: 'Hi' } }] });
+  });
+
+  assert.equal((await callGemini([], [], 'key', false)).content, 'Hi');
+  assert.deepEqual(asked, MODELS);
+});
+
+test('reports a used-up daily quota when every model is out', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => new Response('GenerateRequestsPerDayPerProjectPerModel', { status: 429 }));
+  await assert.rejects(callGemini([], [], 'key', false), /daily quota/);
 });
 
 test('keeps replies within Discord’s 2000 characters', () => {

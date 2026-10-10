@@ -1,6 +1,6 @@
 # wowf-bot
 
-Discord bot that answers WoW Forever questions. Type `/wowf` with a question, and it looks the answer up on Wowhead through the [wow-forever-search](https://github.com/studio-miyanko/wow-forever-search) MCP server, written up by OpenRouter's free models.
+Discord bot that answers WoW Forever questions. Type `/wowf` with a question, and it looks the answer up on Wowhead through the [wow-forever-search](https://github.com/studio-miyanko/wow-forever-search) MCP server, written up by Gemini on its free tier.
 
 ```text
 /wowf question: where does Thunderfury drop?
@@ -11,13 +11,13 @@ It runs on Cloudflare Workers' free plan and needs no server of its own.
 ## How it works
 
 1. Discord sends each `/wowf` to the Worker, which checks Discord's signature and replies "thinking…".
-2. A Durable Object alarm takes the question, because free models can need longer than the 30 seconds a Worker may run after replying.
-3. The agent runs the wow-forever-search tools in the Worker over an in-memory MCP transport and lets `openrouter/free` pick a free model. If that model is down or rate-limited, OpenRouter falls back to other free models that can call tools, read from its live model list.
+2. A Durable Object alarm takes the question, because a question with several tool calls can need longer than the 30 seconds a Worker may run after replying.
+3. The agent runs the wow-forever-search tools in the Worker over an in-memory MCP transport and asks Gemini 3.5 Flash Lite. If it is down or out of quota, Gemini 3.1 Flash Lite takes over.
 4. The answer replaces "thinking…", with the Wowhead links it used.
 
 ## Set up
 
-Requires Node 22, a Cloudflare account and an [OpenRouter](https://openrouter.ai) account, all on free plans.
+Requires Node 22, a Cloudflare account and a [Google AI Studio](https://aistudio.google.com) API key, all on free plans.
 
 1. Create an application in the [Discord Developer Portal](https://discord.com/developers/applications). Under Installation set Install Link to None, then under Bot turn Public Bot off.
 2. Copy the Application ID and Public Key from General Information into `vars` in `wrangler.jsonc`.
@@ -25,7 +25,7 @@ Requires Node 22, a Cloudflare account and an [OpenRouter](https://openrouter.ai
 
    ```sh
    npm install
-   npx wrangler secret put OPENROUTER_API_KEY
+   npx wrangler secret put GEMINI_API_KEY
    npx wrangler deploy
    ```
 
@@ -41,14 +41,14 @@ Requires Node 22, a Cloudflare account and an [OpenRouter](https://openrouter.ai
 Try a question without Discord:
 
 ```sh
-OPENROUTER_API_KEY=... npm run ask -- "Where does Thunderfury drop?"
+GEMINI_API_KEY=... npm run ask -- "Where does Thunderfury drop?"
 ```
 
 ## Limits
 
 | Limit | Value |
 |---|---|
-| OpenRouter free models | 50 requests a day per account, 1,000 after a one-time purchase of 10 credits. A question takes 2 to 4. No fallback helps once the daily limit is used up |
+| Gemini free tier | 15 requests a minute and 500 a day for each of the two models, per AI Studio project. A question takes 2 to 4 |
 | Cloudflare Workers Free | 100,000 requests a day |
 | Question length | 300 characters |
 | Answer length | 2,000 characters, Discord's limit |

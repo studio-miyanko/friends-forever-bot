@@ -29,7 +29,7 @@ export default {
   },
 };
 
-// A Worker may only run 30 s after its reply, and free models can take longer, so each question runs in an alarm.
+// A Worker may only run 30 s after its reply, and a question with several tool calls can take longer, so each question runs in an alarm.
 export class Ask extends DurableObject {
   async start(job) {
     await this.ctx.storage.put('job', job);
@@ -44,10 +44,10 @@ export class Ask extends DurableObject {
     await this.ctx.storage.deleteAll();
     let reply;
     try {
-      reply = await answer(job.question, this.env.OPENROUTER_API_KEY);
+      reply = await answer(job.question, this.env.GEMINI_API_KEY);
     } catch (err) {
       console.log('answer failed', err.message);
-      reply = err.message.includes('per-day') ? QUOTA_USED : FAILED;
+      reply = err.message.includes('daily quota') ? QUOTA_USED : FAILED;
     }
     await editReply(this.env.DISCORD_APP_ID, job.token, `> ${job.question}\n\n${reply}`);
   }

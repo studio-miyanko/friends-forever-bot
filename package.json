@@ -2,7 +2,7 @@
   "name": "wowf-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Discord bot that answers WoW Forever questions with the wow-forever-search MCP server, on Cloudflare Workers and OpenRouter's free models.",
+  "description": "Discord bot that answers WoW Forever questions with the wow-forever-search MCP server, on Cloudflare Workers and Gemini's free tier.",
   "license": "MIT",
   "type": "module",
   "engines": {
