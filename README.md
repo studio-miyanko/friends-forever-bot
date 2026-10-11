@@ -1,16 +1,16 @@
 # wow-forever-bot
 
-Discord bot that answers WoW Forever questions. Type `/wow-forever` with a question, and it looks the answer up on Wowhead through the [wowhead-mcp](https://github.com/studio-miyanko/wowhead-mcp) server, locked to WoW Forever, written up by Gemini on its free tier.
+Discord bot that answers WoW Forever questions. Type `/wowbot` with a question, and it looks the answer up on Wowhead through the [wowhead-mcp](https://github.com/studio-miyanko/wowhead-mcp) server, locked to WoW Forever, written up by Gemini on its free tier.
 
 ```text
-/wow-forever question: where does Thunderfury drop?
+/wowbot question: where does Thunderfury drop?
 ```
 
 It runs on Cloudflare Workers' free plan and needs no server of its own.
 
 ## How it works
 
-1. Discord sends each `/wow-forever` to the Worker, which checks Discord's signature and replies "thinking…".
+1. Discord sends each `/wowbot` to the Worker, which checks Discord's signature and replies "thinking…".
 2. A Durable Object alarm takes the question, because a question with several tool calls can need longer than the 30 seconds a Worker may run after replying.
 3. The agent runs the wowhead-mcp tools in the Worker over an in-memory MCP transport and asks Gemini 3.5 Flash Lite. If it is down or out of quota, Gemini 3.1 Flash Lite takes over.
 4. The answer replaces "thinking…", with the Wowhead links it used.
