@@ -1,8 +1,8 @@
 {
-  "name": "wowf-bot",
+  "name": "wow-forever-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Discord bot that answers WoW Forever questions with the wow-forever-search MCP server, on Cloudflare Workers and Gemini's free tier.",
+  "description": "Discord bot that answers WoW Forever questions with the wowhead-mcp server locked to WoW Forever, on Cloudflare Workers and Gemini's free tier.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.3.1",
-    "wow-forever-search": "github:studio-miyanko/wow-forever-search#semver:^1.1.0"
+    "wowhead-mcp": "github:studio-miyanko/wowhead-mcp#semver:^1"
   },
   "devDependencies": {
     "wrangler": "^4.149.0"

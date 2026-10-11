@@ -13,7 +13,7 @@ const QUOTA_USED = "Today's free AI quota is used up. Try again tomorrow.";
 
 export default {
   async fetch(request, env) {
-    if (request.method !== 'POST') return new Response('wowf-bot', { status: 404 });
+    if (request.method !== 'POST') return new Response('wow-forever-bot', { status: 404 });
     const body = await request.text();
     if (!(await isFromDiscord(request, body, env.DISCORD_PUBLIC_KEY))) return new Response('Bad signature', { status: 401 });
 

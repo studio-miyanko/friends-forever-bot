@@ -1,5 +1,5 @@
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { createServer } from 'wow-forever-search/src/server.js';
+import { createServer } from 'wowhead-mcp/src/server.js';
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 
@@ -24,8 +24,8 @@ let session;
 
 async function connect() {
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  await createServer().connect(serverSide);
-  const client = new Client({ name: 'wowf-bot', version: '1.0.0' });
+  await createServer({ edition: 'forever' }).connect(serverSide);
+  const client = new Client({ name: 'wow-forever-bot', version: '1.0.0' });
   await client.connect(clientSide);
   const { tools } = await client.listTools();
 
