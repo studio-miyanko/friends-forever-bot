@@ -1,4 +1,4 @@
-// Registers the /wowf command once. Only this step needs the bot token, the Worker never does.
+// Registers the /wow-forever command once. Only this step needs the bot token, the Worker never does.
 const appId = process.env.DISCORD_APP_ID;
 const token = process.env.DISCORD_TOKEN;
 if (!appId || !token) {
@@ -7,7 +7,7 @@ if (!appId || !token) {
 }
 
 const command = {
-  name: 'wowf',
+  name: 'wow-forever',
   description: 'Ask about WoW Forever',
   options: [{ type: 3, name: 'question', description: 'Your question', required: true, max_length: 300 }],
 
@@ -21,5 +21,5 @@ const response = await fetch(`https://discord.com/api/v10/applications/${appId}/
   headers: { authorization: `Bot ${token}`, 'content-type': 'application/json' },
   body: JSON.stringify([command]),
 });
-console.log(response.ok ? 'Registered /wowf' : `Discord answered ${response.status}: ${await response.text()}`);
+console.log(response.ok ? 'Registered /wow-forever' : `Discord answered ${response.status}: ${await response.text()}`);
 process.exit(response.ok ? 0 : 1);

@@ -4,7 +4,6 @@
 
 - Discord interactions over HTTP only, no gateway connection, because a Worker can't hold one open.
 - Every question runs in the `Ask` Durable Object's alarm. A Worker may only run 30 s after replying, and free models often need longer.
-- Named wowf-bot until 2026-10-11. The slash command stays `/wowf`.
 - The tools come from wowhead-mcp's `createServer({ edition: 'forever' })` over `InMemoryTransport`. Never copy its parsers here. Fix sources there and bump the dependency.
 - The models stay Gemini 3.5 Flash Lite, then Gemini 3.1 Flash Lite, on the free tier of the AI Studio project "wow forever discord bot" (2026-10-10). Each has its own quota: 15 requests a minute, 500 a day. The user pays for no service, so no paid models, no billing on that project and no paid Cloudflare features.
 - Gemini is called through its OpenAI-compatible endpoint. Tool calls go back to the model unchanged, because Gemini 3 needs the thought signature inside them.

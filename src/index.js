@@ -19,7 +19,7 @@ export default {
 
     const interaction = JSON.parse(body);
     if (interaction.type === PING) return Response.json({ type: PONG });
-    if (interaction.type !== COMMAND || interaction.data.name !== 'wowf') return new Response('Unknown interaction', { status: 400 });
+    if (interaction.type !== COMMAND || interaction.data.name !== 'wow-forever') return new Response('Unknown interaction', { status: 400 });
 
     const question = String(interaction.data.options?.find((option) => option.name === 'question')?.value ?? '')
       .trim()
