@@ -3,6 +3,7 @@
   "name": "wow-forever-bot",
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
   "vars": {
     "DISCORD_APP_ID": "",

@@ -2,7 +2,7 @@
   "name": "wow-forever-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Discord bot that answers WoW Forever questions with the wowhead-mcp server locked to WoW Forever, on Cloudflare Workers and Gemini's free tier.",
+  "description": "Discord bot that answers WoW Forever questions with wowhead-mcp and looks up characters with wow-armory-mcp, on Cloudflare Workers and Gemini's free tier.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/client": "^2.3.1",
+    "wow-armory-mcp": "github:studio-miyanko/wow-armory-mcp#semver:^1",
     "wowhead-mcp": "github:studio-miyanko/wowhead-mcp#semver:^1"
   },
   "devDependencies": {

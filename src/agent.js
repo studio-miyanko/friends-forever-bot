@@ -1,5 +1,6 @@
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { createServer } from 'wowhead-mcp/src/server.js';
+import { createServer as createArmory } from 'wow-armory-mcp/src/server.js';
+import { createServer as createWowhead } from 'wowhead-mcp/src/server.js';
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 
@@ -13,28 +14,36 @@ const ANSWER_NOW = 'Stop looking things up. Answer the question now from what th
 const INSTRUCTIONS = `You answer World of Warcraft: Forever questions for a group of friends in a Discord server.
 
 - Look every fact up with the tools: search for names, get_page for details, get_news for news, beta builds and patch notes. Never answer from memory.
+- For a character's level, spec, gear or stats, use character with the region (eu or us), realm and name. Use realm first if the realm name is unclear.
 - Answer as soon as the tools give enough, usually after 2 or 3 lookups.
-- Cover WoW Forever only. For other games or WoW versions, say that you only know WoW Forever.
+- Cover WoW Forever only. For other games or WoW versions, say that you only know WoW Forever. The one exception is characters: Blizzard's API has no WoW Forever characters yet, so character finds Retail and Classic characters, and you say which version.
 - Keep it short for Discord: at most 1200 characters, plain sentences or a short list, no tables or headings.
-- End with the Wowhead links you used, at most 3, each on its own line.
+- End with the Wowhead links you used, at most 3, each on its own line. Character answers need no links.
 - If the tools don't have the answer, say so plainly.`;
 
 // One MCP session per isolate, so the server's page cache also serves later questions.
 let session;
 
-async function connect() {
+async function connectTo(server) {
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  await createServer({ edition: 'forever' }).connect(serverSide);
+  await server.connect(serverSide);
   const client = new Client({ name: 'wow-forever-bot', version: '1.0.0' });
   await client.connect(clientSide);
   const { tools } = await client.listTools();
+  return tools.map((tool) => ({ client, tool }));
+}
+
+// The armory reads its Blizzard client from the Worker secrets, which nodejs_compat puts into process.env.
+async function connect() {
+  const entries = (await Promise.all([connectTo(createWowhead({ edition: 'forever' })), connectTo(createArmory())])).flat();
+  const clients = new Map(entries.map(({ client, tool }) => [tool.name, client]));
 
   // Gemini's OpenAI endpoint takes OpenAI-style function tools, and MCP already describes each tool in JSON Schema.
-  const functions = tools.map(({ name, description, inputSchema: { $schema, ...parameters } }) => ({
+  const functions = entries.map(({ tool: { name, description, inputSchema: { $schema, ...parameters } } }) => ({
     type: 'function',
     function: { name, description, parameters },
   }));
-  return { client, functions };
+  return { clients, functions };
 }
 
 function getSession() {
@@ -45,9 +54,11 @@ function getSession() {
   return session;
 }
 
-async function runTool(client, call) {
+async function runTool(clients, call) {
   try {
     const args = JSON.parse(call.function.arguments || '{}');
+    const client = clients.get(call.function.name);
+    if (!client) throw new Error(`No tool named ${call.function.name}`);
     const result = await client.callTool({ name: call.function.name, arguments: args });
     return result.content.map((part) => part.text ?? '').join('\n');
   } catch (err) {
@@ -94,7 +105,7 @@ export async function callGemini(messages, tools, apiKey, final) {
 }
 
 export async function answer(question, apiKey, chat = callGemini) {
-  const { client, functions } = await getSession();
+  const { clients, functions } = await getSession();
   const started = Date.now();
 
   // Small models follow the language rule more reliably in the message than in the instructions.
@@ -111,7 +122,7 @@ export async function answer(question, apiKey, chat = callGemini) {
     if (!reply.tool_calls?.length || final) return reply.content?.trim() || NO_ANSWER;
     messages.push({ role: 'assistant', content: reply.content ?? '', tool_calls: reply.tool_calls });
     for (const call of reply.tool_calls) {
-      messages.push({ role: 'tool', tool_call_id: call.id, content: await runTool(client, call) });
+      messages.push({ role: 'tool', tool_call_id: call.id, content: await runTool(clients, call) });
     }
   }
   return NO_ANSWER;

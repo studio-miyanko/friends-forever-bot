@@ -27,7 +27,7 @@ test('feeds tool results back to the model until it answers', async () => {
   const chat = async (messages, tools) => {
     turns.push(messages.at(-1));
     if (turns.length === 1) {
-      assert.deepEqual(tools.map((tool) => tool.function.name).sort(), ['get_news', 'get_page', 'search']);
+      assert.deepEqual(tools.map((tool) => tool.function.name).sort(), ['character', 'get_news', 'get_page', 'realm', 'search']);
       return { content: '', tool_calls: [{ id: 'a', type: 'function', function: { name: 'missing_tool', arguments: '{}' } }] };
     }
     return { content: 'Done.' };
