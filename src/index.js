@@ -5,6 +5,7 @@ import { answer, connectTools } from './agent.js';
 import { COMMAND } from './command.js';
 import { deliver, editReply, isFromDiscord, replyMessage } from './discord.js';
 import { FEEDS } from './news.js';
+import { updateRoster } from './roster.js';
 
 export { DiscordGateway } from './gateway.js';
 export { NewsFeed } from './news.js';
@@ -43,11 +44,12 @@ export default {
   },
 
   // The cron trigger checks every news feed, each in its own object, so one failing feed doesn't hold up the other.
-  // It also starts the Gateway connection's alarm, which keeps it running after that.
+  // It also starts the Gateway connection's alarm, which keeps it running after that, and updates the roster card.
   async scheduled(event, env) {
     const runs = await Promise.allSettled([
       ...Object.keys(FEEDS).map((name) => env.NEWS.get(env.NEWS.idFromName(name)).run(name)),
       env.DISCORD.get(env.DISCORD.idFromName('gateway')).ensure(env.VERSION?.id),
+      updateRoster(env),
     ]);
     for (const run of runs) if (run.status === 'rejected') console.log('scheduled job failed', run.reason?.message);
   },

@@ -29,6 +29,10 @@ Discord passes messages to a bot only over a live Gateway connection, which a Wo
 3. The question runs in the same `Ask` alarm as `/ffbot`. This path needs the bot token in the Worker as `DISCORD_TOKEN`.
 4. Every new scheduled event is posted to the channel in `EVENTS_CHANNEL` as its link, which Discord shows as a card with an Interested button.
 
+## Roster
+
+The cron also keeps a "Who plays what" card in the channel `LAUNCH_CHANNEL` up to date. It counts the members of each class and role from the onboarding picks through Discord's per-role member counts, which a bot gets without the privileged Server Members intent. That endpoint is undocumented, so a failure only skips a run.
+
 ## News
 
 A Cron Trigger runs every 15 minutes, on Cloudflare and free, with nothing to keep running elsewhere.

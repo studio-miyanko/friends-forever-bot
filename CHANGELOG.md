@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.0 (2026-10-16)
+
+- A roster card in #launch counts everyone's class and role picks and lists what nobody plays yet. The cron updates it every 15 minutes and only edits it when a count changes.
+
 ## 1.4.1 (2026-10-16)
 
 - The Gateway connection restarts itself on new code within 15 minutes of a deploy. Its open connection had kept the old code running, so a new Durable Object class replaced the first one once.

@@ -13,7 +13,11 @@
     "ASKER_ROLES": "1560656230194618368,1560656232241700949",
 
     // The #events channel, where every new scheduled event is posted as its link.
-    "EVENTS_CHANNEL": "1560656350999089223"
+    "EVENTS_CHANNEL": "1560656350999089223",
+
+    // The server, and the #launch channel whose roster card counts everyone's class and role picks.
+    "GUILD_ID": "1560627369352634519",
+    "LAUNCH_CHANNEL": "1560709772850892920"
   },
 
   // The two MCP servers run as their own private Workers. The bot only speaks MCP to them.
