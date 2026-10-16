@@ -11,6 +11,7 @@
 - Gemini is called through its OpenAI-compatible endpoint. Tool calls go back to the model unchanged, because Gemini 3 needs the thought signature inside them.
 - Secrets: `GEMINI_API_KEY` is the only Worker secret, also in the keychain as `friends-forever-bot-gemini`. The bot token is in the keychain as `friends-forever-bot-discord-token`, is only used by `npm run register` and is never stored in the Worker. `DISCORD_PUBLIC_KEY` in `wrangler.jsonc` is public by design. Never write a key into a file.
 - Replies go out with `allowed_mentions: { parse: [] }`, so a model can never ping `@everyone`. Every Discord call names the bot in its User-Agent, which Discord requires.
+- The bot role needs no permissions. Interaction replies only use the bot's own `MENTION_EVERYONE`, `SEND_TTS_MESSAGES` and `USE_EXTERNAL_EMOJIS`, and embeds work without `EMBED_LINKS` (Discord changelog 2022-06-29). So `/ffbot` answers in any channel where members may run it, like the members-only #search.
 - Free plan limits: the alarms ran with outcome `ok` on 2026-10-16. If `exceededCpu` or "Too many subrequests" shows up in Workers Logs, the 10 ms CPU or the 50 subrequest limit is the cause.
 
 ## Checks
