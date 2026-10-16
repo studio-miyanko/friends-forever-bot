@@ -88,7 +88,7 @@ export class Ask extends DurableObject {
     let tools;
     try {
       tools = await connectTools([mcpServer(this.env.WOWHEAD, '/forever/mcp'), mcpServer(this.env.ARMORY, '/mcp')]);
-      return replyMessage(question, await answer(question, { apiKey: this.env.GEMINI_API_KEY, tools }));
+      return replyMessage(question, await answer(question, { apiKey: this.env.GEMINI_API_KEY, fallbackKey: this.env.OPENROUTER_API_KEY, tools }));
     } catch (err) {
       console.log('answer failed', err.message);
       return replyMessage(question, { text: err.message.includes('daily quota') ? QUOTA_USED : FAILED });

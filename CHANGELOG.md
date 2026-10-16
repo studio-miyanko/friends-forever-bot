@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0 (2026-10-16)
+
+- When all three Gemini models are busy or out of quota, the rest of the question goes to the free models of the OpenRouter preset `free`, if the secret `OPENROUTER_API_KEY` is set.
+- OpenRouter gets up to 3 tries, because a busy free model answers "rate-limited upstream" or nothing at all, and each try lets `openrouter/free` pick another model.
+- The last step repeats the question, so a small model answers in its language.
+
 ## 1.1.0 (2026-10-16)
 
 - Posts WoW Forever news by itself every 15 minutes: Wowhead's Forever articles to #wowhead and EU blue posts from Wowhead's blue tracker to #blue-posts, each item once.

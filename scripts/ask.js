@@ -16,7 +16,7 @@ const tools = await connectTools([
   new StdioClientTransport({ command: 'npx', args: ['-y', 'github:studio-miyanko/wow-armory-mcp#semver:^1'], env: process.env }),
 ]);
 try {
-  const { text, character } = await answer(question, { apiKey: process.env.GEMINI_API_KEY, tools });
+  const { text, character } = await answer(question, { apiKey: process.env.GEMINI_API_KEY, fallbackKey: process.env.OPENROUTER_API_KEY, tools });
   console.log(text);
   if (character) console.log(`\nArmory: ${character.armory}\nPortrait: ${character.portrait ?? 'none'}`);
 } finally {

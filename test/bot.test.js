@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { MODELS, answer, callGemini } from '../src/agent.js';
+import { MODELS, answer, callGemini, callOpenRouter, modelChain } from '../src/agent.js';
 import { deliver, isFromDiscord, replyMessage } from '../src/discord.js';
 
 const hex = (bytes) => Buffer.from(bytes).toString('hex');
@@ -126,6 +126,62 @@ test('reports a used-up daily quota at once, and stops at a wrong key', async (t
 
   t.mock.method(globalThis, 'fetch', async () => new Response('API key not valid', { status: 401 }));
   await assert.rejects(callGemini([], [], 'bad'), /answered 401/);
+});
+
+test('falls back to OpenRouter once Gemini fails, stays there and sends plain tool calls', async (t) => {
+  const gemini = [];
+  const openrouter = [];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    if (!String(url).startsWith('https://openrouter.ai/')) {
+      gemini.push(JSON.parse(init.body).model);
+      return busy();
+    }
+    openrouter.push({ headers: init.headers, body: JSON.parse(init.body) });
+    return Response.json({ model: 'some/free-model', choices: [{ message: { content: 'Hi' } }] });
+  });
+  const chat = modelChain('or-key');
+  const signed = [{ role: 'assistant', content: '', tool_calls: [{ ...toolCall('search'), extra_content: { google: { thought_signature: 'sig' } } }] }];
+
+  assert.equal((await chat(signed, [], 'key', { pause: async () => {} })).content, 'Hi');
+  assert.equal(gemini.length, MODELS.length * 2);
+  assert.equal(openrouter[0].body.model, '@preset/free');
+  assert.equal(openrouter[0].headers.authorization, 'Bearer or-key');
+  assert.deepEqual(openrouter[0].body.provider, { require_parameters: true });
+  assert.deepEqual(openrouter[0].body.messages[0].tool_calls, [toolCall('search')]);
+
+  await chat([], [], 'key', { pause: async () => {} });
+  assert.equal(gemini.length, MODELS.length * 2);
+  assert.equal(openrouter.length, 2);
+});
+
+test('without an OpenRouter key Gemini\'s error stands, and OpenRouter\'s daily limit reads as a used-up quota', async (t) => {
+  t.mock.method(globalThis, 'fetch', async (url) => (String(url).startsWith('https://openrouter.ai/')
+    ? new Response('{"error":{"message":"Rate limit exceeded: free-models-per-day"}}', { status: 429 })
+    : busy()));
+  await assert.rejects(modelChain(undefined)([], [], 'key', { retry: false }), /answered 503/);
+  await assert.rejects(modelChain('or-key')([], [], 'key', { retry: false }), /OpenRouter used up its daily quota/);
+});
+
+test('retries OpenRouter while a free model is busy or answers empty, and stops at a wrong key', async (t) => {
+  const answers = [
+    () => new Response('{"error":{"message":"google/gemma-4-31b-it:free is temporarily rate-limited upstream."}}', { status: 429 }),
+    () => Response.json({ model: 'a:free', choices: [{ message: { content: '\n\n' } }] }),
+    () => Response.json({ model: 'b:free', choices: [{ message: { content: '', tool_calls: [toolCall('search')] } }] }),
+  ];
+  let asked = 0;
+  t.mock.method(globalThis, 'fetch', async () => answers[asked++]());
+  const pauses = [];
+  const reply = await callOpenRouter([], [], 'or-key', { pause: async (ms) => pauses.push(ms) });
+  assert.deepEqual(reply.tool_calls, [toolCall('search')]);
+  assert.deepEqual(pauses, [1500, 1500]);
+
+  asked = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    asked += 1;
+    return new Response('{"error":{"message":"No auth credentials found"}}', { status: 401 });
+  });
+  await assert.rejects(callOpenRouter([], [], 'bad', { pause: async () => {} }), /OpenRouter answered 401/);
+  assert.equal(asked, 1);
 });
 
 test('every reply is a plain message led by a one-sentence summary, and a character links its armory page', () => {

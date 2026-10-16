@@ -15,7 +15,7 @@ It answers World of Warcraft questions only, and means WoW Forever unless you na
 1. Discord sends each `/ffbot` to the Worker, which checks Discord's signature and shows "thinking…".
 2. A Durable Object alarm takes the question, because one with several lookups can need longer than the 30 seconds a Worker may run after replying.
 3. The bot connects to two MCP servers: [wowhead-mcp](https://github.com/studio-miyanko/wowhead-mcp), locked to WoW Forever, and [wow-armory-mcp](https://github.com/studio-miyanko/wow-armory-mcp). They run as their own private Workers, which the bot reaches through service bindings. The bot only speaks MCP to them and holds none of their code.
-4. Gemini picks the lookups and writes the answer: 3.5 Flash Lite first, then 3.1 Flash Lite, then 3.5 Flash when the others are busy.
+4. Gemini picks the lookups and writes the answer: 3.5 Flash Lite first, then 3.1 Flash Lite, then 3.5 Flash when the others are busy. When all three fail, the rest of the question goes to the free models of an OpenRouter preset named `free`, if the Worker has the secret `OPENROUTER_API_KEY`.
 5. The answer replaces "thinking…".
 
 ## News
@@ -77,6 +77,7 @@ GEMINI_API_KEY="$(security find-generic-password -s friends-forever-bot-gemini -
 | Limit | Value |
 |---|---|
 | Gemini free tier | A daily quota per model, shown in AI Studio. A question takes 2 to 8 requests |
+| OpenRouter free models | 50 requests a day for an account that never bought credits. Give the key a credit limit of 0, so it can't spend |
 | Cloudflare Workers Free | 100,000 requests a day for the whole account |
 | Answer time | Usually 10 to 60 seconds, longer when Gemini is busy |
 | Question length | 300 characters |
@@ -84,7 +85,7 @@ GEMINI_API_KEY="$(security find-generic-password -s friends-forever-bot-gemini -
 
 ## Privacy
 
-Questions go to Google's Gemini API on its free tier. Google may use them to improve its products and people may review them, so don't type personal information. The bot keeps nothing: each question is deleted once its answer is sent.
+Questions go to Google's Gemini API on its free tier, and to OpenRouter's free models when Gemini is busy, whose providers may log them too. Google may use them to improve its products and people may review them, so don't type personal information. The bot keeps nothing: each question is deleted once its answer is sent.
 
 ## Develop
 
