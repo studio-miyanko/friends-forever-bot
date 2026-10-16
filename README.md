@@ -1,6 +1,8 @@
 # Friends Forever Bot
 
-Discord bot for the Friends Forever server. Type `/ffbot` with a World of Warcraft question, and it looks the answer up on Wowhead and Blizzard's armory. Every reply gives a one-sentence summary, then the details and its sources. A character answer links the official armory page and shows the character's portrait.
+Discord bot for the Friends Forever server. Type `/ffbot` with a World of Warcraft question, and it looks the answer up on Wowhead and Blizzard's armory. Every reply is a plain message: a one-sentence summary as a heading, then the details and its sources. A character answer links the official armory page from the summary.
+
+It also posts WoW Forever news on its own: Wowhead's Forever articles to #wowhead and Blizzard's EU blue posts to #blue-posts.
 
 ```text
 /ffbot question: where does Thunderfury drop?
@@ -15,6 +17,19 @@ It answers World of Warcraft questions only, and means WoW Forever unless you na
 3. The bot connects to two MCP servers: [wowhead-mcp](https://github.com/studio-miyanko/wowhead-mcp), locked to WoW Forever, and [wow-armory-mcp](https://github.com/studio-miyanko/wow-armory-mcp). They run as their own private Workers, which the bot reaches through service bindings. The bot only speaks MCP to them and holds none of their code.
 4. Gemini picks the lookups and writes the answer: 3.5 Flash Lite first, then 3.1 Flash Lite, then 3.5 Flash when the others are busy.
 5. The answer replaces "thinking…".
+
+## News
+
+A Cron Trigger runs every 15 minutes, on Cloudflare and free, with nothing to keep running elsewhere.
+
+| Channel | Source | Kept |
+|---|---|---|
+| #wowhead | [Wowhead's Forever news feed](https://www.wowhead.com/news/rss/forever) | Items tagged or titled Forever |
+| #blue-posts | [Wowhead's Forever blue tracker](https://www.wowhead.com/forever/blue-tracker?rss) | EU forum posts, since the US copies and Blizzard's news articles repeat them |
+
+1. Each feed has its own Durable Object, which remembers the items it posted, so nothing appears twice.
+2. The first run posts the 3 newest items, and every run after that posts what is new, oldest first, at most 10 at a time.
+3. Posts go through a channel webhook as embeds with the source and the original date. An updated blue topic gets a new title and posts again.
 
 ## Set up
 
@@ -44,6 +59,12 @@ Requires Node 22.15 or later, a Cloudflare account and a [Google AI Studio](http
 
 6. Add the app to your server with `https://discord.com/oauth2/authorize?client_id=YOUR_APP_ID&scope=applications.commands`.
 7. Optional: limit `/ffbot` to one channel in Server Settings, Integrations.
+8. For the news, create a webhook in each news channel under Edit Channel, Integrations, save both URLs in the keychain and give them to the Worker:
+
+   ```sh
+   security find-generic-password -s friends-forever-bot-wowhead-webhook -w | npx wrangler secret put WOWHEAD_WEBHOOK_URL
+   security find-generic-password -s friends-forever-bot-blue-webhook -w | npx wrangler secret put BLUE_WEBHOOK_URL
+   ```
 
 Try a question without Discord. It starts both MCP servers from GitHub, like any other user would:
 

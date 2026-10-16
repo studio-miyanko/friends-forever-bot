@@ -128,55 +128,40 @@ test('reports a used-up daily quota at once, and stops at a wrong key', async (t
   await assert.rejects(callGemini([], [], 'bad'), /answered 401/);
 });
 
-test('every reply leads with a one-sentence summary, and a character links its armory page', () => {
+test('every reply is a plain message led by a one-sentence summary, and a character links its armory page', () => {
   const text = 'Craft it from two [bindings](https://www.wowhead.com/forever/item=18563) and a quest.\n\n'
     + '- Left binding from Garr\n- Right binding from Baron Geddon\n\nSources: [Thunderfury](https://www.wowhead.com/forever/item=19019)';
   const message = replyMessage('Where does Thunderfury drop?', { text });
-  const [embed] = message.embeds;
-  assert.equal(embed.author.name, 'Where does Thunderfury drop?');
-  assert.equal(embed.title, 'Craft it from two bindings and a quest.');
-  assert.match(embed.description, /^- Left binding from Garr\n- Right binding from Baron Geddon\n\nSources: \[Thunderfury\]/);
-  assert.equal(embed.url, undefined);
+  assert.equal(message.content, '-# Where does Thunderfury drop?\n### Craft it from two bindings and a quest.\n'
+    + '- Left binding from Garr\n- Right binding from Baron Geddon\n\nSources: [Thunderfury](https://www.wowhead.com/forever/item=19019)');
+  assert.equal(message.embeds, undefined);
+  assert.equal(message.flags, 1 << 2);
   assert.deepEqual(message.allowed_mentions, { parse: [] });
-  assert.equal(message.flags, undefined);
 
-  const [card] = replyMessage('Moadzarella?', { text: 'A level 90 Holy Paladin.', character: { armory: ARMORY, portrait: PORTRAIT } }).embeds;
-  assert.equal(card.title, 'A level 90 Holy Paladin.');
-  assert.equal(card.url, ARMORY);
-  assert.deepEqual(card.thumbnail, { url: PORTRAIT });
-  assert.equal(card.description, undefined);
+  const character = replyMessage('Moadzarella?', { text: 'A level 90 Holy Paladin.', character: { armory: ARMORY, portrait: PORTRAIT } });
+  assert.equal(character.content, `-# Moadzarella?\n### [A level 90 Holy Paladin.](${ARMORY})`);
 });
 
-test('replies stay within Discord\'s embed limits', () => {
-  const [embed] = replyMessage('q'.repeat(300), { text: `${'a'.repeat(300)}\n\n${'b'.repeat(5000)}` }).embeds;
-  assert.equal(embed.author.name.length, 256);
-  assert.equal(embed.title, undefined);
-  assert.equal(embed.description.length, 4096);
-
-  const [list] = replyMessage('q', { text: '- just a list' }).embeds;
-  assert.equal(list.title, undefined);
-  assert.equal(list.description, '- just a list');
+test('replies stay within Discord\'s message limit', () => {
+  const long = replyMessage('q'.repeat(300), { text: `${'a'.repeat(300)}\n\n${'b'.repeat(5000)}` });
+  assert.equal(long.content.length, 2000);
+  assert.ok(long.content.startsWith(`-# ${'q'.repeat(255)}…\n${'a'.repeat(300)}\n\nb`));
+  assert.equal(replyMessage('q', { text: '- just a list' }).content, '-# q\n- just a list');
 });
 
-test('a refused embed still arrives as plain text, Discord limits are waited out and an expired token stops', async (t) => {
+test('Discord limits are waited out and an expired token stops', async (t) => {
   const sent = [];
-  const answers = [
-    () => new Response('{"message":"Invalid Form Body"}', { status: 400 }),
-    () => new Response('{"retry_after":0.01}', { status: 429 }),
-    () => Response.json({}),
-  ];
+  const answers = [() => new Response('{"retry_after":0.01}', { status: 429 }), () => Response.json({})];
   t.mock.method(globalThis, 'fetch', async (url, init) => {
     sent.push({ url: String(url), init });
     return answers[sent.length - 1]();
   });
 
   await deliver('app', 'tok', replyMessage('Where?', { text: 'From Garr.' }));
+  assert.equal(sent.length, 2);
   assert.equal(sent[0].url, 'https://discord.com/api/v10/webhooks/app/tok/messages/@original');
   assert.match(sent[0].init.headers['user-agent'], /^DiscordBot \(https:\/\/github\.com\/studio-miyanko\/friends-forever-bot, /);
-  const plain = JSON.parse(sent[2].init.body);
-  assert.equal(plain.content, '> Where?\n\nFrom Garr.');
-  assert.equal(plain.flags, 1 << 2);
-  assert.equal(plain.embeds, undefined);
+  assert.equal(JSON.parse(sent[1].init.body).content, '-# Where?\n### From Garr.');
 
   t.mock.method(globalThis, 'fetch', async () => new Response('{"code":10015}', { status: 404 }));
   await deliver('app', 'tok', { content: 'x' });

@@ -89,7 +89,7 @@ test('the alarm answers once and edits the placeholder', async (t) => {
 
   assert.equal(object.asked, 1);
   assert.equal(sent.length, 1);
-  assert.equal(sent[0].embeds[0].title, 'From Baron Geddon.');
+  assert.equal(sent[0].content, '-# Where?\n### From Baron Geddon.');
   assert.equal(object.ctx.storage.data.size, 0);
 });
 
@@ -110,7 +110,7 @@ test('a retry after a crash sends a failure note instead of silence', async (t) 
   await object.alarm({ isRetry: true, retryCount: 1 });
 
   assert.equal(object.asked, 0);
-  assert.match(sent[0].embeds[0].title, /^Something went wrong/);
+  assert.match(sent[0].content, /^-# Where\?\n### Something went wrong/);
 });
 
 test('the last retry gives up and clears the job', async (t) => {
@@ -122,6 +122,6 @@ test('the last retry gives up and clears the job', async (t) => {
 
 test('a broken connection to the MCP servers still ends in a reply', async () => {
   const object = new Ask({ storage: storage() }, {});
-  const [embed] = (await object.replyTo('Where?')).embeds;
-  assert.match(embed.title, /^Something went wrong/);
+  const { content } = await object.replyTo('Where?');
+  assert.match(content, /### Something went wrong/);
 });

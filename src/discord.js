@@ -4,7 +4,6 @@ const API = 'https://discord.com/api/v10';
 const SUPPRESS_EMBEDS = 1 << 2;
 const CONTENT_MAX = 2000;
 const TITLE_MAX = 256;
-const DESCRIPTION_MAX = 4096;
 const RATE_LIMIT_WAITS = 2;
 
 // Discord asks every app to name itself, and may block requests without it.
@@ -40,29 +39,17 @@ function plainText(markdown) {
   return markdown.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
 }
 
-// The answer's first sentence becomes the title and the rest the description, so every reply reads summary first.
-// A character answer links its armory page from the title and shows the portrait beside it.
+// A plain message reads at full size, while an embed's text is smaller. The question sits small on top and the answer's
+// first sentence becomes a heading, so every reply reads summary first. A character answer links its armory page from it.
+// Links stay quiet, so no previews pile up.
 export function replyMessage(question, { text, character }) {
   const [first, ...rest] = text.trim().split(/\n\s*\n/);
   const summary = plainText(first.replace(/\s+/g, ' '));
   const isSummary = Boolean(summary) && summary.length <= TITLE_MAX && !/^[-*•]|^\d+\./.test(summary);
-  const description = (isSummary ? rest.join('\n\n') : text).trim();
-  return {
-    embeds: [{
-      author: { name: clip(question, TITLE_MAX) },
-      title: isSummary ? summary : undefined,
-      url: isSummary ? character?.armory : undefined,
-      description: description ? clip(description, DESCRIPTION_MAX) : undefined,
-      thumbnail: character?.portrait ? { url: character.portrait } : undefined,
-    }],
-    allowed_mentions: { parse: [] },
-  };
-}
-
-// The same reply without the embed, for when Discord refuses the embed. Links stay quiet, so no previews pile up.
-function plainMessage({ embeds: [embed] }) {
-  const text = [`> ${embed.author.name}`, embed.title, embed.description, embed.url].filter(Boolean).join('\n\n');
-  return { content: clip(text, CONTENT_MAX), flags: SUPPRESS_EMBEDS, allowed_mentions: { parse: [] } };
+  const heading = isSummary ? `### ${character?.armory ? `[${summary}](${character.armory})` : summary}` : undefined;
+  const body = (isSummary ? rest.join('\n\n') : text).trim();
+  const content = [`-# ${clip(question, TITLE_MAX)}`, heading, body].filter(Boolean).join('\n');
+  return { content: clip(content, CONTENT_MAX), flags: SUPPRESS_EMBEDS, allowed_mentions: { parse: [] } };
 }
 
 // Discord names the wait in a header and in its JSON body, while a block page in front of it may send neither.
@@ -91,16 +78,29 @@ export async function deliver(appId, token, message) {
       await sleep(retryAfter(response, body));
       continue;
     }
-    if (response.status === 400 && message.embeds) {
-      console.log('embed refused', body.slice(0, 300));
-      message = plainMessage(message);
-      continue;
-    }
 
     // The token expired or the placeholder is gone, so no retry can succeed.
     if ([401, 404].includes(response.status)) {
       console.log('reply dropped', response.status, body.slice(0, 300));
       return;
+    }
+    throw new Error(`Discord answered ${response.status}: ${body.slice(0, 300)}`);
+  }
+}
+
+// Posts to a channel webhook, which needs no bot permissions. Throws when Discord refuses, so the caller can stop.
+export async function postWebhook(url, message) {
+  for (let waits = 0; ; ) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'user-agent': USER_AGENT },
+      body: JSON.stringify(message),
+    });
+    if (response.ok) return;
+    const body = await response.text();
+    if (response.status === 429 && waits++ < RATE_LIMIT_WAITS) {
+      await sleep(retryAfter(response, body));
+      continue;
     }
     throw new Error(`Discord answered ${response.status}: ${body.slice(0, 300)}`);
   }

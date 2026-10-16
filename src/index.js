@@ -4,6 +4,9 @@ import { DurableObject } from 'cloudflare:workers';
 import { answer, connectTools } from './agent.js';
 import { COMMAND } from './command.js';
 import { deliver, isFromDiscord, replyMessage } from './discord.js';
+import { FEEDS } from './news.js';
+
+export { NewsFeed } from './news.js';
 
 const PING = 1;
 const SLASH_COMMAND = 2;
@@ -36,6 +39,12 @@ export default {
     if (!question) return Response.json({ type: MESSAGE, data: { content: `Ask a question after /${COMMAND.name}.`, flags: EPHEMERAL } });
     await env.ASKS.get(env.ASKS.newUniqueId()).start({ question, token: interaction.token, appId: interaction.application_id });
     return Response.json({ type: DEFERRED_REPLY });
+  },
+
+  // The cron trigger checks every news feed, each in its own object, so one failing feed doesn't hold up the other.
+  async scheduled(event, env) {
+    const runs = await Promise.allSettled(Object.keys(FEEDS).map((name) => env.NEWS.get(env.NEWS.idFromName(name)).run(name)));
+    for (const run of runs) if (run.status === 'rejected') console.log('news failed', run.reason?.message);
   },
 };
 

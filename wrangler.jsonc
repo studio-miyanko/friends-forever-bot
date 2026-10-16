@@ -16,7 +16,17 @@
     { "binding": "ARMORY", "service": "wow-armory-mcp" }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "ASKS", "class_name": "Ask" }]
+    "bindings": [
+      { "name": "ASKS", "class_name": "Ask" },
+      { "name": "NEWS", "class_name": "NewsFeed" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Ask"] }]
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Ask"] },
+    { "tag": "v2", "new_sqlite_classes": ["NewsFeed"] }
+  ],
+
+  // Checks the Wowhead and blue post feeds every 15 minutes. Cron Triggers are part of the free plan.
+  // The webhook URLs for #wowhead and #blue-posts are the secrets WOWHEAD_WEBHOOK_URL and BLUE_WEBHOOK_URL.
+  "triggers": { "crons": ["*/15 * * * *"] }
 }
