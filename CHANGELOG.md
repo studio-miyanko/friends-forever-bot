@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1 (2026-10-16)
+
+- The roster is a section at the end of the launch post instead of its own card. The cron rewrites only that section, so the launch text above it stays as it is.
+
 ## 1.5.0 (2026-10-16)
 
 - A roster card in #launch counts everyone's class and role picks and lists what nobody plays yet. The cron updates it every 15 minutes and only edits it when a count changes.

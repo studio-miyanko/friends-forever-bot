@@ -31,7 +31,7 @@ Discord passes messages to a bot only over a live Gateway connection, which a Wo
 
 ## Roster
 
-The cron also keeps a "Who plays what" card in the channel `LAUNCH_CHANNEL` up to date. It counts the members of each class and role from the onboarding picks through Discord's per-role member counts, which a bot gets without the privileged Server Members intent. That endpoint is undocumented, so a failure only skips a run.
+The cron also keeps a "Who plays what" section at the end of the launch post in the channel `LAUNCH_CHANNEL` up to date, and leaves the rest of the post as it is. It counts the members of each class and role from the onboarding picks through Discord's per-role member counts, which a bot gets without the privileged Server Members intent. That endpoint is undocumented, so a failure only skips a run.
 
 ## News
 
