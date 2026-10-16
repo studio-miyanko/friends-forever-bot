@@ -58,7 +58,7 @@ function gatewayWith(t) {
     return Response.json({ id: `reply${posted.length}` });
   });
   const asks = [];
-  const env = { DISCORD_TOKEN: 'tok', ASKER_ROLES: 'admin,member', ASKS: { newUniqueId: () => 'id', get: () => ({ start: async (job) => asks.push(job) }) } };
+  const env = { DISCORD_TOKEN: 'tok', ASKER_ROLES: 'admin,member', EVENTS_CHANNEL: 'events1', ASKS: { newUniqueId: () => 'id', get: () => ({ start: async (job) => asks.push(job) }) } };
   return { gateway: new Gateway({ storage: storage() }, env), sockets, posted, asks };
 }
 
@@ -90,7 +90,7 @@ test('logs in, keeps the heartbeat, answers a member once and turns a guest away
   await gateway.connect();
   await gateway.receive({ op: 10, d: { heartbeat_interval: 41250 } });
   assert.equal(sockets[0].url, 'https://gateway.discord.gg/?v=10&encoding=json');
-  assert.deepEqual(sockets[0].sent[0], { op: 2, d: { token: 'tok', intents: 513, properties: { os: 'linux', browser: 'friends-forever-bot', device: 'friends-forever-bot' } } });
+  assert.deepEqual(sockets[0].sent[0], { op: 2, d: { token: 'tok', intents: 66049, properties: { os: 'linux', browser: 'friends-forever-bot', device: 'friends-forever-bot' } } });
 
   await gateway.receive(ready);
   t.mock.timers.tick(41250);
@@ -110,6 +110,28 @@ test('logs in, keeps the heartbeat, answers a member once and turns a guest away
   });
   assert.match(posted[1].body.content, /^Only members can ask me/);
   assert.match(posted[2].body.content, /^Ask me a WoW question/);
+});
+
+test('posts every new scheduled event to the events channel once, as its link', async (t) => {
+  const { gateway, posted } = gatewayWith(t);
+  await gateway.connect();
+  await gateway.receive(ready);
+  const created = { op: 0, s: 3, t: 'GUILD_SCHEDULED_EVENT_CREATE', d: { id: 'e1', guild_id: 'g1', creator_id: 'u1', name: 'Molten Core' } };
+  await gateway.receive(created);
+  await gateway.receive(created);
+  assert.equal(posted.length, 1);
+  assert.equal(posted[0].url, 'https://discord.com/api/v10/channels/events1/messages');
+  assert.deepEqual(posted[0].body, { content: '-# New event by <@u1>\nhttps://discord.com/events/g1/e1', allowed_mentions: { parse: [] } });
+  gateway.drop();
+});
+
+test('a session from before new intents logs in fresh instead of resuming', async (t) => {
+  const { gateway, sockets } = gatewayWith(t);
+  await gateway.ctx.storage.put('session', { id: 'old', url: 'wss://resume.discord.gg', botId: BOT, seq: 9, intents: 513 });
+  await gateway.connect();
+  await gateway.receive({ op: 10, d: { heartbeat_interval: 41250 } });
+  assert.equal(sockets[0].sent[0].op, 2);
+  gateway.drop();
 });
 
 test('a reconnect request resumes the session on the address Discord gave', async (t) => {

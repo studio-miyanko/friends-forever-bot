@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0 (2026-10-16)
+
+- Every new scheduled event is posted to #events as its link, which Discord shows as a card with an Interested button. A connection from before this logs in fresh, since a resumed session keeps its old intents.
+
 ## 1.3.0 (2026-10-16)
 
 - Members and admins can ask by mentioning the bot in any chat. A `Gateway` Durable Object holds the connection Discord needs for that, and the answer replaces a "Looking that up…" reply.

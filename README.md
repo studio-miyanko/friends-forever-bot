@@ -24,9 +24,10 @@ It answers World of Warcraft questions only, and means WoW Forever unless you na
 
 Discord passes messages to a bot only over a live Gateway connection, which a Worker can't hold. So a `Gateway` Durable Object keeps it, and its alarm checks every minute and reconnects after a deploy or an outage. The cron trigger starts that alarm.
 
-1. The connection asks for server messages only. A message that mentions the bot carries its text without Discord's privileged Message Content intent.
+1. The connection asks for server messages and scheduled events only. A message that mentions the bot carries its text without Discord's privileged Message Content intent.
 2. A mention from someone with a role in `ASKER_ROLES`, Admin and Member here, gets a "Looking that up…" reply, which the answer replaces. Everyone else gets a one-line note.
 3. The question runs in the same `Ask` alarm as `/ffbot`. This path needs the bot token in the Worker as `DISCORD_TOKEN`.
+4. Every new scheduled event is posted to the channel in `EVENTS_CHANNEL` as its link, which Discord shows as a card with an Interested button.
 
 ## News
 

@@ -6,12 +6,14 @@ import { botRequest, clip } from './discord.js';
 
 const GATEWAY = 'https://gateway.discord.gg/?v=10&encoding=json';
 
-// GUILDS and GUILD_MESSAGES. A message that mentions the bot carries its text without the privileged Message Content intent.
-const INTENTS = (1 << 0) | (1 << 9);
+// GUILDS, GUILD_MESSAGES and GUILD_SCHEDULED_EVENTS. A message that mentions the bot carries its text
+// without the privileged Message Content intent.
+const INTENTS = (1 << 0) | (1 << 9) | (1 << 16);
 const WATCHDOG_MS = 60_000;
 const RECONNECT_MS = 3000;
 const MAX_QUESTION = COMMAND.options[0].max_length;
 const HANDLED_MAX = 50;
+const EVENT_PREFIX = 'event:';
 
 const DISPATCH = 0;
 const HEARTBEAT = 1;
@@ -144,17 +146,38 @@ export class Gateway extends DurableObject {
     }
     if (op === DISPATCH && t === 'READY') {
       console.log('gateway ready');
-      return this.ctx.storage.put('session', { id: d.session_id, url: d.resume_gateway_url, botId: d.user.id, seq: this.seq });
+      return this.ctx.storage.put('session', { id: d.session_id, url: d.resume_gateway_url, botId: d.user.id, seq: this.seq, intents: INTENTS });
     }
     if (op === DISPATCH && t === 'MESSAGE_CREATE') return this.onMessage(d);
+    if (op === DISPATCH && t === 'GUILD_SCHEDULED_EVENT_CREATE') return this.onEvent(d);
     return undefined;
   }
 
   async login() {
     const session = await this.ctx.storage.get('session');
     const token = this.env.DISCORD_TOKEN;
-    if (session) return this.send({ op: RESUME, d: { token, session_id: session.id, seq: this.seq } });
+
+    // A resumed session keeps the intents it started with, so new intents need a fresh login.
+    if (session?.intents === INTENTS) return this.send({ op: RESUME, d: { token, session_id: session.id, seq: this.seq } });
     return this.send({ op: IDENTIFY, d: { token, intents: INTENTS, properties: { os: 'linux', browser: pkg.name, device: pkg.name } } });
+  }
+
+  // A new scheduled event goes to the events channel as its link, which Discord shows as a card with an Interested button.
+  async onEvent(event) {
+    if (!(await this.firstTime(`${EVENT_PREFIX}${event.id}`))) return;
+    const by = event.creator_id ? `-# New event by <@${event.creator_id}>\n` : '';
+    await botRequest(this.env.DISCORD_TOKEN, 'POST', `/channels/${this.env.EVENTS_CHANNEL}/messages`, {
+      content: `${by}https://discord.com/events/${event.guild_id}/${event.id}`,
+      allowed_mentions: { parse: [] },
+    });
+  }
+
+  // A resumed session replays recent events, so each message and event is handled once.
+  async firstTime(key) {
+    const handled = (await this.ctx.storage.get('handled')) ?? [];
+    if (handled.includes(key)) return false;
+    await this.ctx.storage.put('handled', [...handled, key].slice(-HANDLED_MAX));
+    return true;
   }
 
   async onMessage(message) {
@@ -162,10 +185,7 @@ export class Gateway extends DurableObject {
     const question = mentionQuestion(message, session?.botId);
     if (question === undefined) return;
 
-    // A resumed session replays recent events, so each message is answered once.
-    const handled = (await this.ctx.storage.get('handled')) ?? [];
-    if (handled.includes(message.id)) return;
-    await this.ctx.storage.put('handled', [...handled, message.id].slice(-HANDLED_MAX));
+    if (!(await this.firstTime(message.id))) return;
 
     const token = this.env.DISCORD_TOKEN;
     if (!mayAsk(message.member, this.env.ASKER_ROLES.split(','))) {
