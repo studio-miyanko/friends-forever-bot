@@ -2,6 +2,8 @@
 
 Discord bot for the Friends Forever server. Type `/ffbot` with a World of Warcraft question, and it looks the answer up on Wowhead and Blizzard's armory. Every reply is a plain message: a one-sentence summary as a heading, then the details and its sources. A character answer links the official armory page from the summary.
 
+Members and admins can also ask by mentioning the bot in any chat, like `@Friends Forever Bot where does Thunderfury drop?`, and it answers right there.
+
 It also posts WoW Forever news on its own: Wowhead's Forever articles to #wowhead and Blizzard's EU blue posts to #blue-posts.
 
 ```text
@@ -17,6 +19,14 @@ It answers World of Warcraft questions only, and means WoW Forever unless you na
 3. The bot connects to two MCP servers: [wowhead-mcp](https://github.com/studio-miyanko/wowhead-mcp), locked to WoW Forever, and [wow-armory-mcp](https://github.com/studio-miyanko/wow-armory-mcp). They run as their own private Workers, which the bot reaches through service bindings. The bot only speaks MCP to them and holds none of their code.
 4. Gemini picks the lookups and writes the answer: 3.5 Flash Lite first, then 3.1 Flash Lite, then 3.5 Flash when the others are busy. When all three fail, the rest of the question goes to the free models of an OpenRouter preset named `free`, if the Worker has the secret `OPENROUTER_API_KEY`.
 5. The answer replaces "thinking…".
+
+## Mentions
+
+Discord passes messages to a bot only over a live Gateway connection, which a Worker can't hold. So a `Gateway` Durable Object keeps it, and its alarm checks every minute and reconnects after a deploy or an outage. The cron trigger starts that alarm.
+
+1. The connection asks for server messages only. A message that mentions the bot carries its text without Discord's privileged Message Content intent.
+2. A mention from someone with a role in `ASKER_ROLES`, Admin and Member here, gets a "Looking that up…" reply, which the answer replaces. Everyone else gets a one-line note.
+3. The question runs in the same `Ask` alarm as `/ffbot`. This path needs the bot token in the Worker as `DISCORD_TOKEN`.
 
 ## News
 
@@ -77,6 +87,7 @@ GEMINI_API_KEY="$(security find-generic-password -s friends-forever-bot-gemini -
 | Limit | Value |
 |---|---|
 | Gemini free tier | A daily quota per model, shown in AI Studio. A question takes 2 to 8 requests |
+| Durable Objects on the free plan | 13,000 GB-s a day. The Gateway connection stays open around the clock and uses about 10,800 of them |
 | OpenRouter free models | 50 requests a day for an account that never bought credits. Give the key a credit limit of 0, so it can't spend |
 | Cloudflare Workers Free | 100,000 requests a day for the whole account |
 | Answer time | Usually 10 to 60 seconds, longer when Gemini is busy |

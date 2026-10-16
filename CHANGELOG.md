@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0 (2026-10-16)
+
+- Members and admins can ask by mentioning the bot in any chat. A `Gateway` Durable Object holds the connection Discord needs for that, and the answer replaces a "Looking that up…" reply.
+- The bot token is now a Worker secret, `DISCORD_TOKEN`, for that connection and those replies.
+- Every WoW question counts, including WoW Forever's launch times, news and community, since "news" in the old list of things it refuses made it turn down a launch question. It converts time zones itself.
+
 ## 1.2.0 (2026-10-16)
 
 - When all three Gemini models are busy or out of quota, the rest of the question goes to the free models of the OpenRouter preset `free`, if the secret `OPENROUTER_API_KEY` is set.

@@ -41,14 +41,14 @@ function plainText(markdown) {
 
 // A plain message reads at full size, while an embed's text is smaller. The question sits small on top and the answer's
 // first sentence becomes a heading, so every reply reads summary first. A character answer links its armory page from it.
-// Links stay quiet, so no previews pile up.
-export function replyMessage(question, { text, character }) {
+// Links stay quiet, so no previews pile up. A reply to a mention leaves the question out, since Discord shows it above.
+export function replyMessage(question, { text, character }, { quote = true } = {}) {
   const [first, ...rest] = text.trim().split(/\n\s*\n/);
   const summary = plainText(first.replace(/\s+/g, ' '));
   const isSummary = Boolean(summary) && summary.length <= TITLE_MAX && !/^[-*•]|^\d+\./.test(summary);
   const heading = isSummary ? `### ${character?.armory ? `[${summary}](${character.armory})` : summary}` : undefined;
   const body = (isSummary ? rest.join('\n\n') : text).trim();
-  const content = [`-# ${clip(question, TITLE_MAX)}`, heading, body].filter(Boolean).join('\n');
+  const content = [quote ? `-# ${clip(question, TITLE_MAX)}` : undefined, heading, body].filter(Boolean).join('\n');
   return { content: clip(content, CONTENT_MAX), flags: SUPPRESS_EMBEDS, allowed_mentions: { parse: [] } };
 }
 
@@ -85,6 +85,34 @@ export async function deliver(appId, token, message) {
       return;
     }
     throw new Error(`Discord answered ${response.status}: ${body.slice(0, 300)}`);
+  }
+}
+
+// Calls the API as the bot, which only the mention questions need, since their replies are channel messages.
+export async function botRequest(token, method, path, body) {
+  for (let waits = 0; ; ) {
+    const response = await fetch(`${API}${path}`, {
+      method,
+      headers: { authorization: `Bot ${token}`, 'content-type': 'application/json', 'user-agent': USER_AGENT },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await response.text();
+    if (response.ok) return text ? JSON.parse(text) : undefined;
+    if (response.status === 429 && waits++ < RATE_LIMIT_WAITS) {
+      await sleep(retryAfter(response, text));
+      continue;
+    }
+    throw Object.assign(new Error(`Discord answered ${response.status}: ${text.slice(0, 300)}`), { status: response.status });
+  }
+}
+
+// Swaps a mention's "Looking that up…" placeholder for the answer. A deleted placeholder means nobody waits for it.
+export async function editReply(token, { channelId, messageId }, message) {
+  try {
+    await botRequest(token, 'PATCH', `/channels/${channelId}/messages/${messageId}`, message);
+  } catch (err) {
+    if (err.status !== 404) throw err;
+    console.log('reply dropped', err.message);
   }
 }
 

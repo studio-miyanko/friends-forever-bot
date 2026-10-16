@@ -120,6 +120,22 @@ test('the last retry gives up and clears the job', async (t) => {
   assert.equal(object.ctx.storage.data.size, 0);
 });
 
+test('a mention question edits its placeholder as the bot, without the question line', async (t) => {
+  const sent = [];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    sent.push({ url: String(url), method: init.method, auth: init.headers.authorization, body: JSON.parse(init.body) });
+    return Response.json({});
+  });
+  const object = new Ask({ storage: storage() }, { DISCORD_TOKEN: 'tok' });
+  object.replyTo = async (question, quote) => replyMessage(question, { text: 'From Garr.' }, { quote });
+  await object.start({ question: 'Where?', target: { channelId: 'c1', messageId: 'r1' } });
+  await object.alarm();
+
+  assert.deepEqual(sent, [{ url: 'https://discord.com/api/v10/channels/c1/messages/r1', method: 'PATCH', auth: 'Bot tok',
+    body: { content: '### From Garr.', flags: 4, allowed_mentions: { parse: [] } } }]);
+  assert.equal(object.ctx.storage.data.size, 0);
+});
+
 test('a broken connection to the MCP servers still ends in a reply', async () => {
   const object = new Ask({ storage: storage() }, {});
   const { content } = await object.replyTo('Where?');

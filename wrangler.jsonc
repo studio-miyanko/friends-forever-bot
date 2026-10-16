@@ -5,9 +5,12 @@
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
 
-  // The Public Key from the Discord app's General Information. It is public by design.
   "vars": {
-    "DISCORD_PUBLIC_KEY": "bbaed9eb21ebc3d84ce59700d8657c471052d976aa4f5b0dd5b400d7356a72e7"
+    // The Public Key from the Discord app's General Information. It is public by design.
+    "DISCORD_PUBLIC_KEY": "bbaed9eb21ebc3d84ce59700d8657c471052d976aa4f5b0dd5b400d7356a72e7",
+
+    // The Admin and Member roles of the Friends Forever server. Only they get answers to an @mention.
+    "ASKER_ROLES": "1560656230194618368,1560656232241700949"
   },
 
   // The two MCP servers run as their own private Workers. The bot only speaks MCP to them.
@@ -18,15 +21,18 @@
   "durable_objects": {
     "bindings": [
       { "name": "ASKS", "class_name": "Ask" },
-      { "name": "NEWS", "class_name": "NewsFeed" }
+      { "name": "NEWS", "class_name": "NewsFeed" },
+      { "name": "GATEWAY", "class_name": "Gateway" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Ask"] },
-    { "tag": "v2", "new_sqlite_classes": ["NewsFeed"] }
+    { "tag": "v2", "new_sqlite_classes": ["NewsFeed"] },
+    { "tag": "v3", "new_sqlite_classes": ["Gateway"] }
   ],
 
   // Checks the Wowhead and blue post feeds every 15 minutes. Cron Triggers are part of the free plan.
   // The webhook URLs for #wowhead and #blue-posts are the secrets WOWHEAD_WEBHOOK_URL and BLUE_WEBHOOK_URL.
+  // The cron also starts the Gateway connection for @mention questions, which needs the bot token as DISCORD_TOKEN.
   "triggers": { "crons": ["*/15 * * * *"] }
 }

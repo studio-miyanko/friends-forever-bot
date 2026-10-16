@@ -3,9 +3,10 @@ import { DurableObject } from 'cloudflare:workers';
 
 import { answer, connectTools } from './agent.js';
 import { COMMAND } from './command.js';
-import { deliver, isFromDiscord, replyMessage } from './discord.js';
+import { deliver, editReply, isFromDiscord, replyMessage } from './discord.js';
 import { FEEDS } from './news.js';
 
+export { Gateway } from './gateway.js';
 export { NewsFeed } from './news.js';
 
 const PING = 1;
@@ -42,9 +43,13 @@ export default {
   },
 
   // The cron trigger checks every news feed, each in its own object, so one failing feed doesn't hold up the other.
+  // It also starts the Gateway connection's alarm, which keeps it running after that.
   async scheduled(event, env) {
-    const runs = await Promise.allSettled(Object.keys(FEEDS).map((name) => env.NEWS.get(env.NEWS.idFromName(name)).run(name)));
-    for (const run of runs) if (run.status === 'rejected') console.log('news failed', run.reason?.message);
+    const runs = await Promise.allSettled([
+      ...Object.keys(FEEDS).map((name) => env.NEWS.get(env.NEWS.idFromName(name)).run(name)),
+      env.GATEWAY.get(env.GATEWAY.idFromName('gateway')).ensure(),
+    ]);
+    for (const run of runs) if (run.status === 'rejected') console.log('scheduled job failed', run.reason?.message);
   },
 };
 
@@ -55,6 +60,7 @@ function mcpServer(binding, path) {
 }
 
 // A Worker may only run 30 s after its reply, and a question with several lookups can take longer, so each question runs in an alarm.
+// A slash command's job holds the interaction token, a mention's job the channel and placeholder to edit.
 export class Ask extends DurableObject {
   async start(job) {
     await this.ctx.storage.put('job', job);
@@ -69,12 +75,13 @@ export class Ask extends DurableObject {
 
     // The reply is saved before it is sent, so a retry resends it instead of asking the model again,
     // and a retry after a crash sends the failure note instead of silence.
+    const quote = !job.target;
     if (!job.reply) {
-      job.reply = info?.isRetry ? replyMessage(job.question, { text: FAILED }) : await this.replyTo(job.question);
+      job.reply = info?.isRetry ? replyMessage(job.question, { text: FAILED }, { quote }) : await this.replyTo(job.question, quote);
       await this.ctx.storage.put('job', job);
     }
     try {
-      await deliver(job.appId, job.token, job.reply);
+      await (job.target ? editReply(this.env.DISCORD_TOKEN, job.target, job.reply) : deliver(job.appId, job.token, job.reply));
     } catch (err) {
 
       // A throw makes Cloudflare retry in a fresh invocation with a fresh request budget.
@@ -84,14 +91,14 @@ export class Ask extends DurableObject {
     await this.ctx.storage.deleteAll();
   }
 
-  async replyTo(question) {
+  async replyTo(question, quote = true) {
     let tools;
     try {
       tools = await connectTools([mcpServer(this.env.WOWHEAD, '/forever/mcp'), mcpServer(this.env.ARMORY, '/mcp')]);
-      return replyMessage(question, await answer(question, { apiKey: this.env.GEMINI_API_KEY, fallbackKey: this.env.OPENROUTER_API_KEY, tools }));
+      return replyMessage(question, await answer(question, { apiKey: this.env.GEMINI_API_KEY, fallbackKey: this.env.OPENROUTER_API_KEY, tools }), { quote });
     } catch (err) {
       console.log('answer failed', err.message);
-      return replyMessage(question, { text: err.message.includes('daily quota') ? QUOTA_USED : FAILED });
+      return replyMessage(question, { text: err.message.includes('daily quota') ? QUOTA_USED : FAILED }, { quote });
     } finally {
       await tools?.close().catch(() => {});
     }
