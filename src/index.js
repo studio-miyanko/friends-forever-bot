@@ -1,54 +1,90 @@
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { DurableObject } from 'cloudflare:workers';
 
-import { answer } from './agent.js';
-import { editReply, isFromDiscord } from './discord.js';
+import { answer, connectTools } from './agent.js';
+import { COMMAND } from './command.js';
+import { deliver, isFromDiscord, replyMessage } from './discord.js';
 
 const PING = 1;
-const COMMAND = 2;
+const SLASH_COMMAND = 2;
 const PONG = 1;
+const MESSAGE = 4;
 const DEFERRED_REPLY = 5;
-const MAX_QUESTION = 300;
+const EPHEMERAL = 1 << 6;
+const MAX_QUESTION = COMMAND.options[0].max_length;
+const MAX_RETRIES = 6;
 const FAILED = 'Something went wrong while looking that up. Try again in a minute.';
 const QUOTA_USED = "Today's free AI quota is used up. Try again tomorrow.";
 
 export default {
   async fetch(request, env) {
-    if (request.method !== 'POST') return new Response('wow-forever-bot', { status: 404 });
+    if (request.method !== 'POST') return new Response('friends-forever-bot', { status: 404 });
     const body = await request.text();
     if (!(await isFromDiscord(request, body, env.DISCORD_PUBLIC_KEY))) return new Response('Bad signature', { status: 401 });
 
     const interaction = JSON.parse(body);
     if (interaction.type === PING) return Response.json({ type: PONG });
-    if (interaction.type !== COMMAND || interaction.data.name !== 'wowbot') return new Response('Unknown interaction', { status: 400 });
+    if (interaction.type !== SLASH_COMMAND || interaction.data?.name !== COMMAND.name) return new Response('Unknown interaction', { status: 400 });
 
+    // Questions may span lines, while the reply shows them on one.
     const question = String(interaction.data.options?.find((option) => option.name === 'question')?.value ?? '')
+      .replace(/\s+/g, ' ')
       .trim()
       .slice(0, MAX_QUESTION);
-    await env.ASKS.get(env.ASKS.idFromName(interaction.id)).start({ question, token: interaction.token });
+
+    // A blank question would spend the free model quota on nothing.
+    if (!question) return Response.json({ type: MESSAGE, data: { content: `Ask a question after /${COMMAND.name}.`, flags: EPHEMERAL } });
+    await env.ASKS.get(env.ASKS.newUniqueId()).start({ question, token: interaction.token, appId: interaction.application_id });
     return Response.json({ type: DEFERRED_REPLY });
   },
 };
 
-// A Worker may only run 30 s after its reply, and a question with several tool calls can take longer, so each question runs in an alarm.
+// The MCP servers run as their own private Workers, which a service binding reaches without a public URL.
+// The host in the URL only labels the request.
+function mcpServer(binding, path) {
+  return new StreamableHTTPClientTransport(new URL(`https://mcp.internal${path}`), { fetch: (url, init) => binding.fetch(url, init) });
+}
+
+// A Worker may only run 30 s after its reply, and a question with several lookups can take longer, so each question runs in an alarm.
 export class Ask extends DurableObject {
   async start(job) {
     await this.ctx.storage.put('job', job);
-    await this.ctx.storage.setAlarm(Date.now());
+
+    // A second's head start lets Discord store the "thinking…" placeholder before the first edit can arrive.
+    await this.ctx.storage.setAlarm(Date.now() + 1000);
   }
 
-  async alarm() {
+  async alarm(info) {
     const job = await this.ctx.storage.get('job');
     if (!job) return;
 
-    // Cleared first, because a failed alarm is retried and would ask the model again.
-    await this.ctx.storage.deleteAll();
-    let reply;
+    // The reply is saved before it is sent, so a retry resends it instead of asking the model again,
+    // and a retry after a crash sends the failure note instead of silence.
+    if (!job.reply) {
+      job.reply = info?.isRetry ? replyMessage(job.question, { text: FAILED }) : await this.replyTo(job.question);
+      await this.ctx.storage.put('job', job);
+    }
     try {
-      reply = await answer(job.question, this.env.GEMINI_API_KEY);
+      await deliver(job.appId, job.token, job.reply);
+    } catch (err) {
+
+      // A throw makes Cloudflare retry in a fresh invocation with a fresh request budget.
+      if ((info?.retryCount ?? 0) < MAX_RETRIES) throw err;
+      console.log('reply failed', err.message);
+    }
+    await this.ctx.storage.deleteAll();
+  }
+
+  async replyTo(question) {
+    let tools;
+    try {
+      tools = await connectTools([mcpServer(this.env.WOWHEAD, '/forever/mcp'), mcpServer(this.env.ARMORY, '/mcp')]);
+      return replyMessage(question, await answer(question, { apiKey: this.env.GEMINI_API_KEY, tools }));
     } catch (err) {
       console.log('answer failed', err.message);
-      reply = err.message.includes('daily quota') ? QUOTA_USED : FAILED;
+      return replyMessage(question, { text: err.message.includes('daily quota') ? QUOTA_USED : FAILED });
+    } finally {
+      await tools?.close().catch(() => {});
     }
-    await editReply(this.env.DISCORD_APP_ID, job.token, `> ${job.question}\n\n${reply}`);
   }
 }

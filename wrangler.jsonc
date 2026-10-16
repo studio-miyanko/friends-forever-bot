@@ -1,14 +1,20 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "wow-forever-bot",
+  "name": "friends-forever-bot",
   "main": "src/index.js",
   "compatibility_date": "2026-10-01",
-  "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+
+  // The Public Key from the Discord app's General Information. It is public by design.
   "vars": {
-    "DISCORD_APP_ID": "",
-    "DISCORD_PUBLIC_KEY": ""
+    "DISCORD_PUBLIC_KEY": "bbaed9eb21ebc3d84ce59700d8657c471052d976aa4f5b0dd5b400d7356a72e7"
   },
+
+  // The two MCP servers run as their own private Workers. The bot only speaks MCP to them.
+  "services": [
+    { "binding": "WOWHEAD", "service": "wowhead-mcp" },
+    { "binding": "ARMORY", "service": "wow-armory-mcp" }
+  ],
   "durable_objects": {
     "bindings": [{ "name": "ASKS", "class_name": "Ask" }]
   },

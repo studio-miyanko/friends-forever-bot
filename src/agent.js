@@ -1,129 +1,162 @@
-import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { createServer as createArmory } from 'wow-armory-mcp/src/server.js';
-import { createServer as createWowhead } from 'wowhead-mcp/src/server.js';
+import { Client } from '@modelcontextprotocol/client';
+
+import pkg from '../package.json' with { type: 'json' };
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions';
 
-// Each model has its own free daily quota, so the second takes over when the first is used up or down.
-export const MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'];
+// Each model has its own free daily quota and its own load. The two Flash Lite models answer fastest. Flash is slower,
+// but it kept answering on 2026-10-16 while both Lite models refused most calls with 503 "high demand".
+export const MODELS = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.5-flash'];
 const MAX_STEPS = 6;
-const DEADLINE_MS = 10 * 60 * 1000;
-const NO_ANSWER = "Sorry, I couldn't find an answer to that in WoW Forever.";
+const MAX_CALLS = 4;
+const RETRY_PAUSE_MS = 5000;
+
+// After this, steps answer at once and skip the retry round, so a reply lands well inside the 15 minutes Discord allows.
+const DEADLINE_MS = 5 * 60 * 1000;
+const NO_ANSWER = "Sorry, I couldn't find an answer to that.";
 const ANSWER_NOW = 'Stop looking things up. Answer the question now from what the tools returned.';
+const SKIPPED = 'Skipped: too many lookups at once. Answer from what you have.';
+const ARMORY = /^Armory: (https:\/\/worldofwarcraft\.blizzard\.com\/\S+)$/m;
+const PORTRAIT = /^Portrait: (https:\/\/render\.worldofwarcraft\.com\/\S+)$/m;
 
-const INSTRUCTIONS = `You answer World of Warcraft: Forever questions for a group of friends in a Discord server.
+function instructions(today, toolNotes) {
+  return `You are Friends Forever Bot. You answer World of Warcraft questions for friends and family in the Discord server Friends Forever, who play WoW Forever. Today is ${today}.
 
-- Look every fact up with the tools: search for names, get_page for details, get_news for news, beta builds and patch notes. Never answer from memory.
-- For a character's level, spec, gear or stats, use character with the region (eu or us), realm and name. Use realm first if the realm name is unclear.
-- Answer as soon as the tools give enough, usually after 2 or 3 lookups.
-- Cover WoW Forever only. For other games or WoW versions, say that you only know WoW Forever. The one exception is characters: Blizzard's API has no WoW Forever characters yet, so character finds Retail and Classic characters, and you say which version.
-- Keep it short for Discord: at most 1200 characters, plain sentences or a short list, no tables or headings.
-- End with the Wowhead links you used, at most 3, each on its own line. Character answers need no links.
-- If the tools don't have the answer, say so plainly.`;
+Scope
+- Answer only questions about World of Warcraft. For anything else, like the weather, news or homework, reply with one sentence that you only answer World of Warcraft questions, and look nothing up.
+- WoW Forever is always meant, even when the user doesn't say so. Never ask which version.
 
-// One MCP session per isolate, so the server's page cache also serves later questions.
-let session;
+Look things up
+- Take every fact from the tool results. Never fill gaps from memory, and leave out what the tools don't show.
+- Search with official English names. Turn nicknames, abbreviations and other languages into the in-game name first, like "Rag" into "Ragnaros".
+- If search finds nothing, search one distinctive word of the name, or open the page of a related item, quest or NPC and follow its links.
+- search covers items, NPCs, quests and spells. For builds, talents and rotations, open the guide hub https://www.wowhead.com/forever/guides with get_page. For news and patch notes, use get_news, then get_page on the newest fitting post.
+- For a quest chain, say where its first part starts.
+- For a character, use character with region, realm and name, and realm first if the realm is unclear. Blizzard's API has no WoW Forever characters yet, so name the version the tool reports, like Retail or Classic Era.
+- Answer once the tools give enough, usually after 2 or 3 lookups.
 
-async function connectTo(server) {
-  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
-  await server.connect(serverSide);
-  const client = new Client({ name: 'wow-forever-bot', version: '1.0.0' });
-  await client.connect(clientSide);
-  const { tools } = await client.listTools();
-  return tools.map((tool) => ({ client, tool }));
+Reply
+- Write in the language of the question. Keep item, quest, NPC and zone names as the tools spell them.
+- First line: one sentence that answers the question. If the tools don't have the answer, say so there.
+- Then an empty line and the details, at most 5 short bullets. No tables, headings or bold.
+- Last line: "Sources:" and at most 3 masked links to pages you opened, like [Ragnaros](https://www.wowhead.com/forever/npc=11502). For a character, link its armory page. Only use URLs from the tool results.
+- At most 1,200 characters in total.
+
+Notes from the tools
+${toolNotes}`;
 }
 
-// The armory reads its Blizzard client from the Worker secrets, which nodejs_compat puts into process.env.
-async function connect() {
-  const entries = (await Promise.all([connectTo(createWowhead({ edition: 'forever' })), connectTo(createArmory())])).flat();
-  const clients = new Map(entries.map(({ client, tool }) => [tool.name, client]));
+function sleep(ms) {
+  return new Promise((done) => setTimeout(done, ms));
+}
 
-  // Gemini's OpenAI endpoint takes OpenAI-style function tools, and MCP already describes each tool in JSON Schema.
-  const functions = entries.map(({ tool: { name, description, inputSchema: { $schema, ...parameters } } }) => ({
-    type: 'function',
-    function: { name, description, parameters },
+// Connects to MCP servers through any transport and offers their tools to Gemini, which takes OpenAI-style functions.
+// MCP already describes each tool in JSON Schema.
+export async function connectTools(transports) {
+  const clients = await Promise.all(transports.map(async (transport) => {
+    const client = new Client({ name: pkg.name, version: pkg.version });
+    await client.connect(transport);
+    return client;
   }));
-  return { clients, functions };
+  const entries = (await Promise.all(clients.map(async (client) => (await client.listTools()).tools.map((tool) => ({ client, tool }))))).flat();
+  const owners = new Map(entries.map(({ client, tool }) => [tool.name, client]));
+  return {
+    instructions: clients.map((client) => client.getInstructions()).filter(Boolean).join('\n\n'),
+    functions: entries.map(({ tool: { name, description, inputSchema: { $schema, ...parameters } } }) => ({
+      type: 'function',
+      function: { name, description, parameters },
+    })),
+    async call({ function: { name, arguments: json } }) {
+      try {
+        const client = owners.get(name);
+        if (!client) throw new Error(`No tool named ${name}`);
+        const result = await client.callTool({ name, arguments: JSON.parse(json || '{}') });
+        return result.content.map((part) => part.text ?? '').join('\n');
+      } catch (err) {
+        return `Tool error: ${err.message}`;
+      }
+    },
+    close: () => Promise.all(clients.map((client) => client.close())),
+  };
 }
 
-function getSession() {
-  session ??= connect().catch((err) => {
-    session = undefined;
-    throw err;
-  });
-  return session;
+// The armory link and portrait come from the armory tool, never from the model, so they can't be made up.
+function characterLinks(name, result) {
+  const armory = name === 'character' ? result.match(ARMORY)?.[1] : undefined;
+  return armory ? { armory, portrait: result.match(PORTRAIT)?.[1] } : undefined;
 }
 
-async function runTool(clients, call) {
+async function askModel(model, messages, tools, apiKey) {
   try {
-    const args = JSON.parse(call.function.arguments || '{}');
-    const client = clients.get(call.function.name);
-    if (!client) throw new Error(`No tool named ${call.function.name}`);
-    const result = await client.callTool({ name: call.function.name, arguments: args });
-    return result.content.map((part) => part.text ?? '').join('\n');
+    const response = await fetch(GEMINI_URL, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model, messages, tools, max_tokens: 1500, reasoning_effort: 'low' }),
+      signal: AbortSignal.timeout(45_000),
+    });
+    if (response.ok) {
+      const message = (await response.json()).choices?.[0]?.message;
+      if (message?.content?.trim() || message?.tool_calls?.length) return { message };
+      return { failure: `${model} sent an empty reply` };
+    }
+    const text = await response.text();
+    if (text.includes('PerDay')) return { failure: `${model} used up its daily quota`, quota: true };
+
+    // A wrong key fails on every model, so trying more is pointless.
+    return { failure: `${model} answered ${response.status}: ${text.slice(0, 300)}`, fatal: [401, 403].includes(response.status) };
   } catch (err) {
-    return `Tool error: ${err.message}`;
+    return { failure: `${model} failed: ${err.message}` };
   }
 }
 
-// Gemini speaks the OpenAI format, so the MCP tools and the loop below stay as they are.
-export async function callGemini(messages, tools, apiKey, final) {
+// Busy models usually recover within seconds, so a round where every model failed gets one more try,
+// unless every model has used up its daily quota, which lasts until midnight Pacific.
+export async function callGemini(messages, tools, apiKey, { retry = true, pause = sleep } = {}) {
   let failure;
-  for (const model of MODELS) {
-    try {
-      const response = await fetch(GEMINI_URL, {
-        method: 'POST',
-        headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' },
-        body: JSON.stringify({
-          model,
-          messages,
-          tools,
-          tool_choice: final ? 'none' : 'auto',
-          max_tokens: 1500,
-          reasoning_effort: 'low',
-        }),
-        signal: AbortSignal.timeout(45_000),
-      });
-      if (response.ok) {
-        const message = (await response.json()).choices?.[0]?.message;
+  for (let round = 1; round <= (retry ? 2 : 1); round++) {
+    if (round > 1) await pause(RETRY_PAUSE_MS);
+    let quotas = 0;
+    for (const model of MODELS) {
+      const result = await askModel(model, messages, tools, apiKey);
+      if (result.message) {
         console.log('answered by', model);
-        if (message?.content?.trim() || message?.tool_calls?.length) return message;
-        failure = `${model} sent an empty reply`;
-      } else {
-        const text = await response.text();
-        failure = text.includes('PerDay') ? `${model} used up its daily quota` : `${model} answered ${response.status}: ${text.slice(0, 300)}`;
-
-        // A wrong key fails on every model.
-        if ([401, 403].includes(response.status)) break;
+        return result.message;
       }
-    } catch (err) {
-      failure = `${model} failed: ${err.message}`;
+      console.log(result.failure);
+      failure = result.failure;
+      if (result.fatal) throw new Error(failure);
+      if (result.quota) quotas += 1;
     }
-    console.log(failure);
+    if (quotas === MODELS.length) break;
   }
   throw new Error(failure);
 }
 
-export async function answer(question, apiKey, chat = callGemini) {
-  const { clients, functions } = await getSession();
+// Asks Gemini with the MCP tools until it answers. Returns the text and, after a character lookup, its armory links.
+export async function answer(question, { apiKey, tools, chat = callGemini, today = new Date().toISOString().slice(0, 10) }) {
   const started = Date.now();
 
   // Small models follow the language rule more reliably in the message than in the instructions.
   const messages = [
-    { role: 'system', content: INSTRUCTIONS },
+    { role: 'system', content: instructions(today, tools.instructions) },
     { role: 'user', content: `${question}\n\n(Reply in the language of the question above.)` },
   ];
-  for (let step = 1; step <= MAX_STEPS; step++) {
-    const final = step === MAX_STEPS || Date.now() - started > DEADLINE_MS;
+  let character;
+  for (let step = 1; ; step++) {
+    const late = Date.now() - started > DEADLINE_MS;
+    const final = step === MAX_STEPS || late;
 
-    // Gemini ignores tool_choice none and keeps looking things up, only a plain request makes it answer.
+    // Gemini ignores tool_choice none and keeps looking things up, so only a plain request makes it answer.
     if (final) messages.push({ role: 'user', content: ANSWER_NOW });
-    const reply = await chat(messages, functions, apiKey, final);
-    if (!reply.tool_calls?.length || final) return reply.content?.trim() || NO_ANSWER;
+    const reply = await chat(messages, tools.functions, apiKey, { retry: !late });
+    if (!reply.tool_calls?.length || final) return { text: reply.content?.trim() || NO_ANSWER, character };
+
+    // Tool calls go back unchanged, because Gemini 3 needs the thought signature inside them.
     messages.push({ role: 'assistant', content: reply.content ?? '', tool_calls: reply.tool_calls });
-    for (const call of reply.tool_calls) {
-      messages.push({ role: 'tool', tool_call_id: call.id, content: await runTool(clients, call) });
+    for (const [index, call] of reply.tool_calls.entries()) {
+      const result = index < MAX_CALLS ? await tools.call(call) : SKIPPED;
+      character ??= characterLinks(call.function.name, result);
+      messages.push({ role: 'tool', tool_call_id: call.id, content: result });
     }
   }
-  return NO_ANSWER;
 }

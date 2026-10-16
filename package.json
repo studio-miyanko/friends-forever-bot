@@ -1,12 +1,13 @@
 {
-  "name": "wow-forever-bot",
+  "name": "friends-forever-bot",
   "version": "1.0.0",
   "private": true,
-  "description": "Discord bot that answers WoW Forever questions with wowhead-mcp and looks up characters with wow-armory-mcp, on Cloudflare Workers and Gemini's free tier.",
+  "description": "Discord bot for the Friends Forever server: answers World of Warcraft questions through the wowhead-mcp and wow-armory-mcp servers, on Cloudflare Workers and Gemini's free tier.",
   "license": "MIT",
+  "repository": "github:studio-miyanko/friends-forever-bot",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.15"
   },
   "scripts": {
     "ask": "node scripts/ask.js",
@@ -15,9 +16,7 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@modelcontextprotocol/client": "^2.3.1",
-    "wow-armory-mcp": "github:studio-miyanko/wow-armory-mcp#semver:^1",
-    "wowhead-mcp": "github:studio-miyanko/wowhead-mcp#semver:^1"
+    "@modelcontextprotocol/client": "^2.3.1"
   },
   "devDependencies": {
     "wrangler": "^4.149.0"

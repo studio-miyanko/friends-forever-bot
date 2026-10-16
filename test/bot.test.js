@@ -2,9 +2,33 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { MODELS, answer, callGemini } from '../src/agent.js';
-import { clip, isFromDiscord } from '../src/discord.js';
+import { deliver, isFromDiscord, replyMessage } from '../src/discord.js';
 
 const hex = (bytes) => Buffer.from(bytes).toString('hex');
+const ARMORY = 'https://worldofwarcraft.blizzard.com/worldsoul/eu/armory/character/draenor/moadzarella';
+const PORTRAIT = 'https://render.worldofwarcraft.com/eu/character/draenor/222/175356126-avatar.jpg';
+
+// Stands in for the MCP servers, so the loop runs without network.
+function fakeTools(results = {}) {
+  const calls = [];
+  return {
+    calls,
+    instructions: 'Read long pages to the end.',
+    functions: ['search', 'character'].map((name) => ({ type: 'function', function: { name, description: name, parameters: { type: 'object' } } })),
+    async call({ function: { name } }) {
+      calls.push(name);
+      return results[name] ?? `Tool error: No tool named ${name}`;
+    },
+  };
+}
+
+function toolCall(name, id = name) {
+  return { id, type: 'function', function: { name, arguments: '{}' } };
+}
+
+function busy() {
+  return new Response('{"error":{"code":503,"message":"This model is currently experiencing high demand."}}', { status: 503 });
+}
 
 test('accepts only interactions signed with the app key', async () => {
   const keys = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
@@ -22,52 +46,140 @@ test('accepts only interactions signed with the app key', async () => {
   assert.equal(await isFromDiscord(new Request('https://bot.test'), body, publicKey), false);
 });
 
-test('feeds tool results back to the model until it answers', async () => {
-  const turns = [];
-  const chat = async (messages, tools) => {
-    turns.push(messages.at(-1));
-    if (turns.length === 1) {
-      assert.deepEqual(tools.map((tool) => tool.function.name).sort(), ['character', 'get_news', 'get_page', 'realm', 'search']);
-      return { content: '', tool_calls: [{ id: 'a', type: 'function', function: { name: 'missing_tool', arguments: '{}' } }] };
-    }
-    return { content: 'Done.' };
+test('feeds tool results back to the model until it answers, with the servers\' notes in its instructions', async () => {
+  const seen = [];
+  const chat = async (messages) => {
+    seen.push(messages.at(-1));
+    if (seen.length > 1) return { content: 'Done.' };
+    assert.match(messages[0].content, /Today is 2026-10-16\./);
+    assert.match(messages[0].content, /Answer only questions about World of Warcraft/);
+    assert.match(messages[0].content, /Notes from the tools\nRead long pages to the end\.$/);
+    return { content: '', tool_calls: [toolCall('search')] };
   };
+  const tools = fakeTools({ search: '- Thunderfury (item) https://www.wowhead.com/forever/item=19019' });
 
-  assert.equal(await answer('Where is Thunderfury?', 'key', chat), 'Done.');
-  assert.equal(turns[1].role, 'tool');
-  assert.match(turns[1].content, /missing_tool/);
+  assert.deepEqual(await answer('Where is Thunderfury?', { apiKey: 'key', tools, chat, today: '2026-10-16' }), { text: 'Done.', character: undefined });
+  assert.equal(seen[1].role, 'tool');
+  assert.match(seen[1].content, /item=19019/);
 });
 
 test('asks for an answer on the last step instead of more lookups', async () => {
-  let last;
-  const chat = async (messages, tools, key, final) => {
-    last = messages.at(-1);
-    if (final) return { content: 'Answer.' };
-    return { content: '', tool_calls: [{ id: 'a', type: 'function', function: { name: 'missing_tool', arguments: '{}' } }] };
+  const chat = async (messages) => {
+    const asked = messages.at(-1).content?.includes('Answer the question now');
+    return asked ? { content: 'Answer.', tool_calls: [toolCall('search')] } : { content: '', tool_calls: [toolCall('search')] };
   };
+  const tools = fakeTools({ search: 'nothing' });
 
-  assert.equal(await answer('Where is Thunderfury?', 'key', chat), 'Answer.');
-  assert.match(last.content, /Answer the question now/);
+  assert.equal((await answer('Where is Thunderfury?', { apiKey: 'key', tools, chat })).text, 'Answer.');
+  assert.equal(tools.calls.length, 5);
 });
 
-test('falls back to the second model when the first is used up', async (t) => {
+test('caps lookups per step and takes the armory links only from the character tool', async () => {
+  const tools = fakeTools({
+    character: `Moadzarella, level 90 Dwarf Paladin\nArmory: ${ARMORY}\nPortrait: ${PORTRAIT}`,
+    search: 'Armory: https://worldofwarcraft.blizzard.com/made-up',
+  });
+  let steps = 0;
+  const chat = async () => {
+    steps += 1;
+    if (steps > 1) return { content: 'Moadzarella is a level 90 Holy Paladin.' };
+    return { content: '', tool_calls: ['a', 'b', 'c', 'd', 'e'].map((id, index) => toolCall(index === 1 ? 'character' : 'search', id)) };
+  };
+
+  const reply = await answer('Moadzarella on Draenor EU?', { apiKey: 'key', tools, chat });
+  assert.deepEqual(tools.calls, ['search', 'character', 'search', 'search']);
+  assert.deepEqual(reply.character, { armory: ARMORY, portrait: PORTRAIT });
+});
+
+test('falls back through the models while they are busy', async (t) => {
   const asked = [];
   t.mock.method(globalThis, 'fetch', async (url, init) => {
     asked.push(JSON.parse(init.body).model);
-    if (asked.length === 1) return new Response('{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}', { status: 429 });
-    return Response.json({ choices: [{ message: { content: 'Hi' } }] });
+    return asked.length < 3 ? busy() : Response.json({ choices: [{ message: { content: 'Hi' } }] });
   });
 
-  assert.equal((await callGemini([], [], 'key', false)).content, 'Hi');
+  assert.equal((await callGemini([], [], 'key')).content, 'Hi');
   assert.deepEqual(asked, MODELS);
 });
 
-test('reports a used-up daily quota when every model is out', async (t) => {
-  t.mock.method(globalThis, 'fetch', async () => new Response('GenerateRequestsPerDayPerProjectPerModel', { status: 429 }));
-  await assert.rejects(callGemini([], [], 'key', false), /daily quota/);
+test('tries every model once more after a short pause when all are busy', async (t) => {
+  const asked = [];
+  const pauses = [];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    asked.push(JSON.parse(init.body).model);
+    return asked.length <= MODELS.length ? busy() : Response.json({ choices: [{ message: { content: 'Hi' } }] });
+  });
+
+  assert.equal((await callGemini([], [], 'key', { pause: async (ms) => pauses.push(ms) })).content, 'Hi');
+  assert.deepEqual(asked, [...MODELS, MODELS[0]]);
+  assert.deepEqual(pauses, [5000]);
 });
 
-test('keeps replies within Discord’s 2000 characters', () => {
-  assert.equal(clip('a'.repeat(2500)).length, 2000);
-  assert.equal(clip('short'), 'short');
+test('reports a used-up daily quota at once, and stops at a wrong key', async (t) => {
+  let asked = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    asked += 1;
+    return new Response('{"quotaId":"GenerateRequestsPerDayPerProjectPerModel-FreeTier"}', { status: 429 });
+  });
+  await assert.rejects(callGemini([], [], 'key', { pause: async () => assert.fail('no second round') }), /daily quota/);
+  assert.equal(asked, MODELS.length);
+
+  t.mock.method(globalThis, 'fetch', async () => new Response('API key not valid', { status: 401 }));
+  await assert.rejects(callGemini([], [], 'bad'), /answered 401/);
+});
+
+test('every reply leads with a one-sentence summary, and a character links its armory page', () => {
+  const text = 'Craft it from two [bindings](https://www.wowhead.com/forever/item=18563) and a quest.\n\n'
+    + '- Left binding from Garr\n- Right binding from Baron Geddon\n\nSources: [Thunderfury](https://www.wowhead.com/forever/item=19019)';
+  const message = replyMessage('Where does Thunderfury drop?', { text });
+  const [embed] = message.embeds;
+  assert.equal(embed.author.name, 'Where does Thunderfury drop?');
+  assert.equal(embed.title, 'Craft it from two bindings and a quest.');
+  assert.match(embed.description, /^- Left binding from Garr\n- Right binding from Baron Geddon\n\nSources: \[Thunderfury\]/);
+  assert.equal(embed.url, undefined);
+  assert.deepEqual(message.allowed_mentions, { parse: [] });
+  assert.equal(message.flags, undefined);
+
+  const [card] = replyMessage('Moadzarella?', { text: 'A level 90 Holy Paladin.', character: { armory: ARMORY, portrait: PORTRAIT } }).embeds;
+  assert.equal(card.title, 'A level 90 Holy Paladin.');
+  assert.equal(card.url, ARMORY);
+  assert.deepEqual(card.thumbnail, { url: PORTRAIT });
+  assert.equal(card.description, undefined);
+});
+
+test('replies stay within Discord\'s embed limits', () => {
+  const [embed] = replyMessage('q'.repeat(300), { text: `${'a'.repeat(300)}\n\n${'b'.repeat(5000)}` }).embeds;
+  assert.equal(embed.author.name.length, 256);
+  assert.equal(embed.title, undefined);
+  assert.equal(embed.description.length, 4096);
+
+  const [list] = replyMessage('q', { text: '- just a list' }).embeds;
+  assert.equal(list.title, undefined);
+  assert.equal(list.description, '- just a list');
+});
+
+test('a refused embed still arrives as plain text, Discord limits are waited out and an expired token stops', async (t) => {
+  const sent = [];
+  const answers = [
+    () => new Response('{"message":"Invalid Form Body"}', { status: 400 }),
+    () => new Response('{"retry_after":0.01}', { status: 429 }),
+    () => Response.json({}),
+  ];
+  t.mock.method(globalThis, 'fetch', async (url, init) => {
+    sent.push({ url: String(url), init });
+    return answers[sent.length - 1]();
+  });
+
+  await deliver('app', 'tok', replyMessage('Where?', { text: 'From Garr.' }));
+  assert.equal(sent[0].url, 'https://discord.com/api/v10/webhooks/app/tok/messages/@original');
+  assert.match(sent[0].init.headers['user-agent'], /^DiscordBot \(https:\/\/github\.com\/studio-miyanko\/friends-forever-bot, /);
+  const plain = JSON.parse(sent[2].init.body);
+  assert.equal(plain.content, '> Where?\n\nFrom Garr.');
+  assert.equal(plain.flags, 1 << 2);
+  assert.equal(plain.embeds, undefined);
+
+  t.mock.method(globalThis, 'fetch', async () => new Response('{"code":10015}', { status: 404 }));
+  await deliver('app', 'tok', { content: 'x' });
+  t.mock.method(globalThis, 'fetch', async () => new Response('busy', { status: 502 }));
+  await assert.rejects(deliver('app', 'tok', { content: 'x' }), /Discord answered 502/);
 });
