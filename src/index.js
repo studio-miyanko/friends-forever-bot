@@ -6,7 +6,7 @@ import { COMMAND } from './command.js';
 import { deliver, editReply, isFromDiscord, replyMessage } from './discord.js';
 import { FEEDS } from './news.js';
 
-export { Gateway } from './gateway.js';
+export { DiscordGateway } from './gateway.js';
 export { NewsFeed } from './news.js';
 
 const PING = 1;
@@ -47,7 +47,7 @@ export default {
   async scheduled(event, env) {
     const runs = await Promise.allSettled([
       ...Object.keys(FEEDS).map((name) => env.NEWS.get(env.NEWS.idFromName(name)).run(name)),
-      env.GATEWAY.get(env.GATEWAY.idFromName('gateway')).ensure(),
+      env.DISCORD.get(env.DISCORD.idFromName('gateway')).ensure(env.VERSION?.id),
     ]);
     for (const run of runs) if (run.status === 'rejected') console.log('scheduled job failed', run.reason?.message);
   },

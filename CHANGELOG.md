@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1 (2026-10-16)
+
+- The Gateway connection restarts itself on new code within 15 minutes of a deploy. Its open connection had kept the old code running, so a new Durable Object class replaced the first one once.
+
 ## 1.4.0 (2026-10-16)
 
 - Every new scheduled event is posted to #events as its link, which Discord shows as a card with an Interested button. A connection from before this logs in fresh, since a resumed session keeps its old intents.

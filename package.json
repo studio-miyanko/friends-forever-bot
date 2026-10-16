@@ -1,6 +1,6 @@
 {
   "name": "friends-forever-bot",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
   "description": "Discord bot for the Friends Forever server: answers World of Warcraft questions through the wowhead-mcp and wow-armory-mcp servers, on Cloudflare Workers and Gemini's free tier.",
   "license": "MIT",

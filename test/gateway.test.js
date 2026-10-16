@@ -5,7 +5,7 @@ import test from 'node:test';
 // cloudflare:workers only exists inside workerd, so the Gateway gets a stand-in base class here.
 const STUB = 'data:text/javascript,export class DurableObject { constructor(ctx, env) { this.ctx = ctx; this.env = env; } }';
 registerHooks({ resolve: (specifier, context, next) => (specifier === 'cloudflare:workers' ? { url: STUB, shortCircuit: true } : next(specifier, context)) });
-const { Gateway, mayAsk, mentionQuestion } = await import('../src/gateway.js');
+const { DiscordGateway, mayAsk, mentionQuestion } = await import('../src/gateway.js');
 
 const BOT = '1560632632063041536';
 
@@ -59,7 +59,9 @@ function gatewayWith(t) {
   });
   const asks = [];
   const env = { DISCORD_TOKEN: 'tok', ASKER_ROLES: 'admin,member', EVENTS_CHANNEL: 'events1', ASKS: { newUniqueId: () => 'id', get: () => ({ start: async (job) => asks.push(job) }) } };
-  return { gateway: new Gateway({ storage: storage() }, env), sockets, posted, asks };
+  const aborted = [];
+  const ctx = { storage: storage(), abort: (reason) => aborted.push(reason) };
+  return { gateway: new DiscordGateway(ctx, { ...env, VERSION: { id: 'v-old' } }), sockets, posted, asks, aborted };
 }
 
 const ready = { op: 0, s: 1, t: 'READY', d: { session_id: 's1', resume_gateway_url: 'wss://resume.discord.gg', user: { id: BOT } } };
@@ -132,6 +134,16 @@ test('a session from before new intents logs in fresh instead of resuming', asyn
   await gateway.receive({ op: 10, d: { heartbeat_interval: 41250 } });
   assert.equal(sockets[0].sent[0].op, 2);
   gateway.drop();
+});
+
+test('an object on older code than the cron closes its connection resumably and resets', async (t) => {
+  const { gateway, sockets, aborted } = gatewayWith(t);
+  await gateway.connect();
+  await gateway.ensure('v-old');
+  assert.deepEqual(aborted, []);
+  await gateway.ensure('v-new');
+  assert.deepEqual(aborted, ['newer code deployed']);
+  assert.equal(sockets[0].closedWith, 4000);
 });
 
 test('a reconnect request resumes the session on the address Discord gave', async (t) => {

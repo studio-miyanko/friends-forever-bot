@@ -25,14 +25,20 @@
     "bindings": [
       { "name": "ASKS", "class_name": "Ask" },
       { "name": "NEWS", "class_name": "NewsFeed" },
-      { "name": "GATEWAY", "class_name": "Gateway" }
+      { "name": "DISCORD", "class_name": "DiscordGateway" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Ask"] },
     { "tag": "v2", "new_sqlite_classes": ["NewsFeed"] },
-    { "tag": "v3", "new_sqlite_classes": ["Gateway"] }
+    { "tag": "v3", "new_sqlite_classes": ["Gateway"] },
+
+    // The first Gateway object kept running old code after deploys, so a new class replaced it once.
+    { "tag": "v4", "deleted_classes": ["Gateway"], "new_sqlite_classes": ["DiscordGateway"] }
   ],
+
+  // Tells the Gateway connection which code version is current, so it can restart itself after a deploy.
+  "version_metadata": { "binding": "VERSION" },
 
   // Checks the Wowhead and blue post feeds every 15 minutes. Cron Triggers are part of the free plan.
   // The webhook URLs for #wowhead and #blue-posts are the secrets WOWHEAD_WEBHOOK_URL and BLUE_WEBHOOK_URL.

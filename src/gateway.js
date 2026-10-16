@@ -61,9 +61,16 @@ function reply(token, message, content) {
 }
 
 // Holds the bot's one Gateway connection, which Discord needs to send it messages at all.
-// An alarm checks it every minute and reconnects after a deploy or an outage. The cron trigger starts the alarm.
-export class Gateway extends DurableObject {
-  async ensure() {
+// An alarm checks it every minute and reconnects after an outage. The cron trigger starts the alarm.
+export class DiscordGateway extends DurableObject {
+  // The open connection keeps this object alive on the code it started with, so a deploy alone never reaches it.
+  // The cron trigger runs the newest code and passes its version: an older object closes the connection
+  // resumably and resets, and the alarm brings it back on the new code.
+  async ensure(version) {
+    if (version && this.env.VERSION?.id && version !== this.env.VERSION.id) {
+      this.drop(RESUMABLE_CLOSE);
+      this.ctx.abort('newer code deployed');
+    }
     // A stop after a wrong token gets another try, so a fixed secret takes effect without a manual reset.
     await this.ctx.storage.delete('stopped');
     if (!(await this.ctx.storage.getAlarm())) await this.ctx.storage.setAlarm(Date.now() + 1000);
