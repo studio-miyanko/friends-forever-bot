@@ -10,8 +10,8 @@ function texts(components) {
 test('counts every pick and lists what nobody plays yet', () => {
   const roster = texts(rosterParts({ Tank: 1, DPS: 3, Mage: 2, Priest: 1, Admin: 4 })).join('\n');
   assert.match(roster, /🛡️ Tank: 1\n💚 Healer: 0\n💥 DPS: 3/);
-  assert.match(roster, /🔮 Mage: 2/);
-  assert.match(roster, /- Roles: 💚 Healer\n- Classes: 🐾 Druid, 🏹 Hunter, 🔨 Paladin, 🗡️ Rogue, ⚡ Shaman, 💀 Warlock, ⚔️ Warrior/);
+  assert.match(roster, /<:mage:\d+> Mage: 2/);
+  assert.match(roster, /- Roles: 💚 Healer\n- Classes: <:druid:\d+> Druid, <:hunter:\d+> Hunter, <:paladin:\d+> Paladin, <:rogue:\d+> Rogue, <:shaman:\d+> Shaman, <:warlock:\d+> Warlock, <:warrior:\d+> Warrior/);
 
   const full = Object.fromEntries(['Tank', 'Healer', 'DPS', 'Druid', 'Hunter', 'Mage', 'Paladin', 'Priest', 'Rogue', 'Shaman', 'Warlock', 'Warrior'].map((name) => [name, 1]));
   assert.match(texts(rosterParts(full)).join('\n'), /Every role and class is covered\./);

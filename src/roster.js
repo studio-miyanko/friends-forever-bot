@@ -1,8 +1,19 @@
 import { botRequest } from './discord.js';
 
 // The onboarding picks, with the icons the onboarding answers show.
+// Classes use the server's own class icon emojis, which only render inside the Friends Forever server.
 const ROLES = [['Tank', '🛡️'], ['Healer', '💚'], ['DPS', '💥']];
-const CLASSES = [['Druid', '🐾'], ['Hunter', '🏹'], ['Mage', '🔮'], ['Paladin', '🔨'], ['Priest', '✨'], ['Rogue', '🗡️'], ['Shaman', '⚡'], ['Warlock', '💀'], ['Warrior', '⚔️']];
+const CLASSES = [
+  ['Druid', '<:druid:1562469250671706193>'],
+  ['Hunter', '<:hunter:1562469252802289775>'],
+  ['Mage', '<:mage:1562469255994150922>'],
+  ['Paladin', '<:paladin:1562469257223082125>'],
+  ['Priest', '<:priest:1562469259529953330>'],
+  ['Rogue', '<:rogue:1562469261673238639>'],
+  ['Shaman', '<:shaman:1562469263300763778>'],
+  ['Warlock', '<:warlock:1562469265293180928>'],
+  ['Warrior', '<:warrior:1562469276080934922>'],
+];
 const TITLE = '## 🧮 Who plays what';
 const TEXT = 10;
 const SEPARATOR = 14;

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.2 (2026-10-21)
+
+- The roster shows the server's own class icon emojis instead of stand-in emoji, the same icons the onboarding question shows.
+
 ## 1.5.1 (2026-10-16)
 
 - The roster is a section at the end of the launch post instead of its own card. The cron rewrites only that section, so the launch text above it stays as it is.
