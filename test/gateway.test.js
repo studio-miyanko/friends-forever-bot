@@ -111,7 +111,7 @@ test('logs in, keeps the heartbeat, answers a member once and turns a guest away
     allowed_mentions: { parse: [], replied_user: false },
   });
   assert.match(posted[1].body.content, /^Only members can ask me/);
-  assert.match(posted[2].body.content, /^Ask me a WoW question/);
+  assert.match(posted[2].body.content, /^Ask me a question/);
 });
 
 test('posts every new scheduled event to the events channel once, as its link', async (t) => {

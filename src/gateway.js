@@ -33,7 +33,7 @@ const FATAL_CLOSES = new Set([4004, 4010, 4011, 4012, 4013, 4014]);
 
 const THINKING = '-# Looking that up…';
 const ONLY_MEMBERS = 'Only members can ask me. Ask an admin to become a member.';
-const HOW_TO_ASK = 'Ask me a WoW question right after the mention.';
+const HOW_TO_ASK = 'Ask me a question right after the mention.';
 
 function sleep(ms) {
   return new Promise((done) => setTimeout(done, ms));

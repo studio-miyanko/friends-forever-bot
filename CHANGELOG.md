@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.0 (2026-10-21)
+
+- The bot answers any question, not only World of Warcraft. WoW answers still come from Wowhead first and from the armory for characters. Other answers come from the model's own knowledge, without a Sources line.
+
 ## 1.5.2 (2026-10-21)
 
 - The roster shows the server's own class icon emojis instead of stand-in emoji, the same icons the onboarding question shows.

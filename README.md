@@ -1,6 +1,6 @@
 # Friends Forever Bot
 
-Discord bot for the Friends Forever server. Type `/ffbot` with a World of Warcraft question, and it looks the answer up on Wowhead and Blizzard's armory. Every reply is a plain message: a one-sentence summary as a heading, then the details and its sources. A character answer links the official armory page from the summary.
+Discord bot for the Friends Forever server. Type `/ffbot` with any question. World of Warcraft answers come from Wowhead and Blizzard's armory. Every reply is a plain message: a one-sentence summary as a heading, then the details and its sources. A character answer links the official armory page from the summary.
 
 Members and admins can also ask by mentioning the bot in any chat, like `@Friends Forever Bot where does Thunderfury drop?`, and it answers right there.
 
@@ -10,7 +10,7 @@ It also posts WoW Forever news on its own: Wowhead's Forever articles to #wowhea
 /ffbot question: where does Thunderfury drop?
 ```
 
-It answers World of Warcraft questions only, and means WoW Forever unless you name another version. It runs on Cloudflare Workers' free plan and Gemini's free tier.
+It answers anything. Questions outside World of Warcraft come from the model's own knowledge, without sources. For WoW it means WoW Forever unless you name another version. It runs on Cloudflare Workers' free plan and Gemini's free tier.
 
 ## How it works
 

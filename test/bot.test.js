@@ -52,7 +52,7 @@ test('feeds tool results back to the model until it answers, with the servers\' 
     seen.push(messages.at(-1));
     if (seen.length > 1) return { content: 'Done.' };
     assert.match(messages[0].content, /Today is 2026-10-16\./);
-    assert.match(messages[0].content, /Answer every question about World of Warcraft/);
+    assert.match(messages[0].content, /Answer any question, about World of Warcraft or anything else\./);
     assert.match(messages[0].content, /Notes from the tools\nRead long pages to the end\.$/);
     return { content: '', tool_calls: [toolCall('search')] };
   };
